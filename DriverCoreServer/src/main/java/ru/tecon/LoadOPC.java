@@ -1,0 +1,308 @@
+package ru.tecon;
+
+import oracle.jdbc.OracleConnection;
+import ru.tecon.beanInterface.LoadOPCLocal;
+import ru.tecon.beanInterface.LoadOPCRemote;
+import ru.tecon.model.DataModel;
+import ru.tecon.model.ValueModel;
+
+import javax.annotation.Resource;
+import javax.ejb.*;
+import javax.sql.DataSource;
+import java.sql.*;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Future;
+import java.util.logging.Logger;
+
+/**
+ * Stateless bean реализующий интерфейсы
+ * {@link LoadOPCLocal} и {@link LoadOPCRemote}
+ */
+@Stateless(name = "LoadOPC", mappedName = "ejb/LoadOPC")
+@Local(LoadOPCLocal.class)
+@Remote(LoadOPCRemote.class)
+public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
+
+    private static final Logger LOG = Logger.getLogger(LoadOPC.class.getName());
+
+    private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH");
+
+    /**
+     * insert который загружает объект в базу <br>
+     * первый параметр - имя объекта <br>
+     * второй параметр - {@code <OpcKind>Hda</OpcKind><ItemName>'имя объекта'</ItemName><Server>'имя сервера'</Server>}
+     */
+    private static final String SQL_INSERT_OPC_OBJECT = "insert into tsa_opc_object values((select get_guid_base64 from dual), ?, ?, 1)";
+    /**
+     * select для опеределения подписан ли объект <br>
+     * 1 - если подписан или ничего не вернет в обратном случае <br>
+     * параметр - {@code <OpcKind>Hda</OpcKind><ItemName>'имя объекта'</ItemName><Server>'имя сервера'</Server>}
+     */
+    private static final String SQL_CHECK_LINKED = "select b.subscribed from tsa_opc_object a " +
+            "inner join tsa_linked_object b on a.id = b.opc_object_id and a.opc_path = ?";
+
+
+
+    /**
+     * select для определения требует ли база <br>
+     * загрузки в нее конфигурации сервера <br>
+     * параметр - {@code %<Server>'имя сервера'</Server>}
+     */
+    private static final String SQL_CHECK_REQUEST_LOAD_CONFIG = "select 1 from dual " +
+            "where exists(select * from arm_commands " +
+            "where kind = 'ForceBrowse' and args like ? and is_success_execution is null)";
+
+
+
+    /**
+     * select выгружает id запросов на конфигурацию сервера <br>
+     * id и имя объектов сервера <br>
+     * параметро - {@code %<Server>'имя сервера'</Server>}
+     */
+    private static final String SQL_GET_OPC_OBJECT_ID = "select b.id, b.display_name, a.id from arm_commands a " +
+            "inner join tsa_opc_object b " +
+            "on a.args = b.opc_path and a.kind = 'ForceBrowse' " +
+            "and a.is_success_execution is null and a.args like ?";
+    /**
+     * insert который загружает в базу конфигурацию сервера <br>
+     * первый параметр - имя параметра <br>
+     * второй параметр - {@code <ItemName>'имя объекта':'имя параметра'</ItemName>} <br>
+     * третий параметр - id объекта
+     */
+    private static final String SQL_INSERT_CONFIG = "insert into tsa_opc_element values ((select get_guid_base64 from dual), ?, ?, ?, 1, null)";
+    /**
+     * update который выставляет статус выполнения insert по добавлению конфигурации <br>
+     * первый параметр - {@code <'имя объекта'>'количество вставленных параметров'<'имя объекта'>} <br>
+     * второй параметр - комментарии в произвольном виде <br>
+     * третий параметр - id запроса
+     */
+    private static final String SQL_UPDATE_CHECK = "update arm_commands " +
+            "set is_success_execution = 1, result_description = ?, display_result_description = ?, end_time = sysdate where id = ?";
+
+
+
+    private static final String SQL_GET_OBJECT = "select a.id from tsa_opc_object a " +
+            "where opc_path = ? " +
+            "and exists(select 1 from tsa_linked_object where opc_object_id = a.id and subscribed = 1)";
+    private static final String SQL_GET_LINKED_PARAMETERS = "select c.display_name, b.aspid_object_id, b.aspid_param_id, " +
+            "b.aspid_agr_id, b.measure_unit_transformer " +
+            "from tsa_linked_element b, tsa_opc_element c " +
+            "where b.opc_element_id in (select id from tsa_opc_element where opc_object_id = ?) " +
+            "and b.opc_element_id = c.id " +
+            "and exists(select a.obj_id, a.par_id from dz_par_dev_link a where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id)";
+    private static final String SQL_GET_START_DATE = "select to_char(time_stamp, 'dd.mm.yyyy hh24') " +
+            "from dz_input_start where obj_id = ? and par_id = ? and stat_aggr = ?";
+
+
+
+    private static final String SQL_INSERT_DATA = "{call dz_util1.input_data(?)}";
+
+    @Resource(name = "jdbc/DataSource")
+    private DataSource ds;
+
+    @Resource(name = "jdbc/DataSourceUpload")
+    private DataSource dsUpload;
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public void insertOPCObjects(List<String> objects, String serverName) {
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stmInsertObject = connect.prepareStatement(SQL_INSERT_OPC_OBJECT)) {
+            for (String object: objects) {
+                String objectPath = loadObjectPath(object, serverName);
+                stmInsertObject.setString(1, object);
+                stmInsertObject.setString(2, objectPath);
+                try {
+                    stmInsertObject.executeUpdate();
+                    LOG.info("insertOPCObjects Успешная вставка объекта " + objectPath);
+                } catch(SQLException e) {
+                    LOG.warning("insertOPCObjects Данная запись уже существует " + objectPath);
+                }
+            }
+        } catch (SQLException e) {
+            LOG.warning("insertOPCObjects ошибка обращения к базе " + e.getMessage() +
+                    " objects: " + objects + " serverName: " + serverName);
+        }
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public boolean checkObject(String objectName, String serverName) {
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stm = connect.prepareStatement(SQL_CHECK_LINKED);
+             PreparedStatement stmInsertObject = connect.prepareStatement(SQL_INSERT_OPC_OBJECT)) {
+            String objectPath = loadObjectPath(objectName, serverName);
+            stm.setString(1, objectPath);
+
+            ResultSet res = stm.executeQuery();
+            if (res.next() && (res.getInt(1) == 1)) {
+                return true;
+            } else {
+                stmInsertObject.setString(1, objectName);
+                stmInsertObject.setString(2, objectPath);
+
+                try {
+                    stmInsertObject.executeUpdate();
+                    LOG.info("checkObject Успешная вставка объекта: " + objectPath);
+                } catch(SQLException e) {
+                    LOG.warning("checkObject Данная запись уже существует: " + objectPath);
+                }
+                return false;
+            }
+        } catch (SQLException e) {
+            LOG.warning("checkObject Ошибка обращения к базе " + e.getMessage() +
+                    " objectName: " + objectName + " serverName: " + serverName);
+        }
+        return false;
+    }
+
+    @Override
+    public boolean isLoadConfig(String serverName) {
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stm = connect.prepareStatement(SQL_CHECK_REQUEST_LOAD_CONFIG)) {
+            stm.setString(1, "%<Server>" + serverName + "</Server>");
+
+            ResultSet res = stm.executeQuery();
+            return res.next();
+        } catch (SQLException e) {
+            LOG.warning("isLoadConfig Ошибка обращения к базе " + e.getMessage() + " serverName: " + serverName);
+            return false;
+        }
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public void putConfig(List<String> config, String serverName) {
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stmObjectId = connect.prepareStatement(SQL_GET_OPC_OBJECT_ID);
+             PreparedStatement stmUpdateConfig = connect.prepareStatement(SQL_INSERT_CONFIG);
+             PreparedStatement stmUpdateCheck = connect.prepareStatement(SQL_UPDATE_CHECK)) {
+            stmObjectId.setString(1, "%<Server>" + serverName + "</Server>");
+
+            ResultSet resObjectId = stmObjectId.executeQuery();
+            while (resObjectId.next()) {
+                int count = 0;
+                for (String item: config) {
+                    stmUpdateConfig.setString(1, item);
+                    stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + item + "</ItemName>");
+                    stmUpdateConfig.setString(3, resObjectId.getString(1));
+
+                    try {
+                        stmUpdateConfig.executeUpdate();
+                        count++;
+                        LOG.info("putConfig Успешная вставка " + item);
+                    } catch (SQLException e) {
+                        LOG.warning("putConfig Запись уже существует " + item);
+                    }
+                }
+
+                stmUpdateCheck.setString(1, "<" + resObjectId.getString(2) + ">" + count + "</" + resObjectId.getString(2) + ">");
+                stmUpdateCheck.setString(2, "Получено " + count + " элементов по объекту '" + resObjectId.getString(2) + "'.");
+                stmUpdateCheck.setString(3, resObjectId.getString(3));
+
+                stmUpdateCheck.executeUpdate();
+            }
+        } catch (SQLException e) {
+            LOG.warning("putConfig Ошибка обращения к базе " + e.getMessage() +
+                    " config: " + config + " serverName: " + serverName);
+        }
+    }
+
+    @Override
+    public ArrayList<DataModel> loadObjectParameters(String objectName, String serverName) {
+        LocalDateTime startDate;
+        ArrayList<DataModel> paramList = new ArrayList<>();
+
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stmGetObject = connect.prepareStatement(SQL_GET_OBJECT);
+             PreparedStatement stmGetLinkedParameters = connect.prepareStatement(SQL_GET_LINKED_PARAMETERS);
+             PreparedStatement stmGetStartDate = connect.prepareStatement(SQL_GET_START_DATE)) {
+            stmGetObject.setString(1, loadObjectPath(objectName, serverName));
+
+            ResultSet resGetObject = stmGetObject.executeQuery();
+            String objectId;
+            if (resGetObject.next()) {
+                objectId = resGetObject.getString(1);
+            } else {
+                return null;
+            }
+
+            ResultSet resStartDate;
+
+            stmGetLinkedParameters.setString(1, objectId);
+
+            ResultSet resLinked = stmGetLinkedParameters.executeQuery();
+            while (resLinked.next()) {
+                stmGetStartDate.setInt(1, resLinked.getInt(2));
+                stmGetStartDate.setInt(2, resLinked.getInt(3));
+                stmGetStartDate.setInt(3, resLinked.getInt(4));
+
+                startDate = null;
+
+                resStartDate = stmGetStartDate.executeQuery();
+                while (resStartDate.next()) {
+                    startDate = LocalDateTime.parse(resStartDate.getString(1), FORMAT);
+                }
+
+                paramList.add(new DataModel(resLinked.getString(1), resLinked.getInt(2), resLinked.getInt(3),
+                        resLinked.getInt(4), startDate,
+                        (resLinked.getString(5) == null) ? null : resLinked.getString(5).substring(2)));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        LOG.info("loadObjectParams object: " + objectName + ":" + serverName +
+                " parameters count: " + paramList.size());
+
+        return paramList;
+    }
+
+    @Override
+    @Asynchronous
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public Future<Void> putData(List<DataModel> paramList) {
+        try (OracleConnection connect = dsUpload.getConnection().unwrap(oracle.jdbc.OracleConnection.class);
+             PreparedStatement stmAlter = connect.prepareStatement("alter session set nls_numeric_characters = '.,'");
+             CallableStatement stm = connect.prepareCall(SQL_INSERT_DATA)) {
+            stmAlter.execute();
+
+            List<Object> dataList = new ArrayList<>();
+            for (DataModel item: paramList) {
+                for (ValueModel value: item.getData()) {
+                    Date date = new java.sql.Date(value.getTime()
+                            .atZone(ZoneId.systemDefault())
+                            .toInstant().toEpochMilli());
+
+                    Object[] row = {item.getObjectId(), item.getParamId(), item.getAggrId(), value.getValue(), value.getQuality(), date, null};
+                    Struct str = connect.createStruct("T_DZ_UTIL_INPUT_DATA_ROW", row);
+                    dataList.add(str);
+                }
+            }
+
+            if (dataList.size() > 0) {
+                long timer = System.currentTimeMillis();
+//                LOG.info("UploadObjectDataSBean.putData put: " + dataList.size() + " values " + paramList);
+
+                Array array = connect.createOracleArray("T_DZ_UTIL_INPUT_DATA", dataList.toArray());
+
+                stm.setArray(1, array);
+                stm.execute();
+
+                LOG.info("UploadObjectDataSBean.putData done put: " + dataList.size() + " values " + (System.currentTimeMillis() - timer));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            LOG.warning("UploadObjectDataSBean.putData error upload: " + e.getMessage() + " " + paramList);
+        }
+        return null;
+    }
+
+    private String loadObjectPath(String objectName, String serverName) {
+        return "<OpcKind>Hda</OpcKind><ItemName>" + objectName + "</ItemName><Server>" + serverName + "</Server>";
+    }
+}
