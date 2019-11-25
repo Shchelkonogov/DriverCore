@@ -84,21 +84,36 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             "set is_success_execution = 1, result_description = ?, display_result_description = ?, end_time = sysdate where id = ?";
 
 
-
+    /**
+     * select для получения opc_id объекта <br>
+     * параметр - {@code <OpcKind>Hda</OpcKind><ItemName>'имя объекта'</ItemName><Server>'имя сервера'</Server>}
+     */
     private static final String SQL_GET_OBJECT = "select a.id from tsa_opc_object a " +
             "where opc_path = ? " +
             "and exists(select 1 from tsa_linked_object where opc_object_id = a.id and subscribed = 1)";
+    /**
+     * select для получения списка парамтров для выгрузки данных <br>
+     * параметр - opc_id
+     */
     private static final String SQL_GET_LINKED_PARAMETERS = "select c.display_name, b.aspid_object_id, b.aspid_param_id, " +
             "b.aspid_agr_id, b.measure_unit_transformer " +
             "from tsa_linked_element b, tsa_opc_element c " +
             "where b.opc_element_id in (select id from tsa_opc_element where opc_object_id = ?) " +
             "and b.opc_element_id = c.id " +
             "and exists(select a.obj_id, a.par_id from dz_par_dev_link a where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id)";
+    /**
+     * select для получения даты с которой нужны значения по парамтерам <br>
+     * первый параметр - id объекта <br>
+     * второй параметр - id параметра <br>
+     * третий параметр - stat_aggregate
+     */
     private static final String SQL_GET_START_DATE = "select to_char(time_stamp, 'dd.mm.yyyy hh24') " +
             "from dz_input_start where obj_id = ? and par_id = ? and stat_aggr = ?";
 
 
-
+    /**
+     * function для загрузки значений в базу принимает массив T_DZ_UTIL_INPUT_DATA типа T_DZ_UTIL_INPUT_DATA_ROW
+     */
     private static final String SQL_INSERT_DATA = "{call dz_util1.input_data(?)}";
 
     @Resource(name = "jdbc/DataSource")
@@ -253,7 +268,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                         (resLinked.getString(5) == null) ? null : resLinked.getString(5).substring(2)));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOG.warning("loadObjectParams SQLException: " + e.getMessage());
         }
 
         LOG.info("loadObjectParams object: " + objectName + ":" + serverName +
@@ -278,7 +293,8 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                             .atZone(ZoneId.systemDefault())
                             .toInstant().toEpochMilli());
 
-                    Object[] row = {item.getObjectId(), item.getParamId(), item.getAggrId(), value.getValue(), value.getQuality(), date, null};
+                    Object[] row = {item.getObjectId(), item.getParamId(), item.getAggregateId(), value.getValue(),
+                            value.getQuality(), date, null};
                     Struct str = connect.createStruct("T_DZ_UTIL_INPUT_DATA_ROW", row);
                     dataList.add(str);
                 }
@@ -286,22 +302,30 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
             if (dataList.size() > 0) {
                 long timer = System.currentTimeMillis();
-//                LOG.info("UploadObjectDataSBean.putData put: " + dataList.size() + " values " + paramList);
+//                LOG.info("putData put: " + dataList.size() + " values " + paramList);
 
                 Array array = connect.createOracleArray("T_DZ_UTIL_INPUT_DATA", dataList.toArray());
 
                 stm.setArray(1, array);
                 stm.execute();
 
-                LOG.info("UploadObjectDataSBean.putData done put: " + dataList.size() + " values " + (System.currentTimeMillis() - timer));
+                LOG.info("putData done put: " + dataList.size() + 
+                        " values; put time: " + (System.currentTimeMillis() - timer));
             }
         } catch (SQLException e) {
             e.printStackTrace();
-            LOG.warning("UploadObjectDataSBean.putData error upload: " + e.getMessage() + " " + paramList);
+            LOG.warning("putData error upload: " + e.getMessage() + " " + paramList);
         }
         return null;
     }
 
+    /**
+     * Метод формирует строку для базы 
+     * {@code <OpcKind>Hda</OpcKind><ItemName>"objectName"</ItemName><Server>"serverName"</Server>}
+     * @param objectName имя объекта
+     * @param serverName имя сервера
+     * @return строка результата
+     */
     private String loadObjectPath(String objectName, String serverName) {
         return "<OpcKind>Hda</OpcKind><ItemName>" + objectName + "</ItemName><Server>" + serverName + "</Server>";
     }
