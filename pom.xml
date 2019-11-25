@@ -11,6 +11,7 @@
     <modules>
         <module>DriverCoreClient</module>
         <module>DriverCoreServer</module>
+        <module>PushEvent</module>
     </modules>
 
     <dependencies>
