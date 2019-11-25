@@ -17,5 +17,11 @@ public class TestDriverCore {
         Context ctx = new InitialContext(ht);
 
         LoadOPCRemote opc = (LoadOPCRemote) ctx.lookup("ejb.LoadOPC#ru.tecon.beanInterface.LoadOPCRemote");
+
+        if (opc != null) {
+            System.out.println("ok");
+        } else {
+            System.out.println("fail");
+        }
     }
 }
