@@ -1,2 +1,4 @@
 *.iml
 .idea/*
+PushEvent/resources/log/*
+PushEvent/resources/config
