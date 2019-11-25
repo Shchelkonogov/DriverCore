@@ -48,7 +48,19 @@ public interface LoadOPCRemote {
      */
     void putConfig(List<String> config, String serverName);
 
+    /**
+     * Метод выгружает из базы список параметров для
+     * получения по ним значений
+     * @param objectName имя объекта
+     * @param serverName имя сервера
+     * @return список параметров
+     */
     ArrayList<DataModel> loadObjectParameters(String objectName, String serverName);
 
+    /**
+     * Асинхронный метод для загрузки значений по парамтерам в базу
+     * @param paramList список параметров со значениями
+     * @return ничего не возращается
+     */
     Future<Void> putData(List<DataModel> paramList);
 }
