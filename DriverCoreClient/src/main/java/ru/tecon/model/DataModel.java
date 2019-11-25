@@ -11,16 +11,16 @@ public class DataModel implements Comparable<DataModel>, Serializable {
     private String paramName;
     private int objectId;
     private int paramId;
-    private int aggrId;
+    private int aggregateId;
     private LocalDateTime startTime;
     private List<ValueModel> data = new ArrayList<>();
     private String incrementValue;
 
-    public DataModel(String paramName, int objectId, int paramId, int aggrId, LocalDateTime startTime, String incrementValue) {
+    public DataModel(String paramName, int objectId, int paramId, int aggregateId, LocalDateTime startTime, String incrementValue) {
         this.paramName = paramName;
         this.objectId = objectId;
         this.paramId = paramId;
-        this.aggrId = aggrId;
+        this.aggregateId = aggregateId;
         this.startTime = startTime;
         this.incrementValue = incrementValue;
     }
@@ -44,12 +44,8 @@ public class DataModel implements Comparable<DataModel>, Serializable {
         return paramId;
     }
 
-    public int getAggrId() {
-        return aggrId;
-    }
-
-    public void setStartTime(LocalDateTime startTime) {
-        this.startTime = startTime;
+    public int getAggregateId() {
+        return aggregateId;
     }
 
     public LocalDateTime getStartTime() {
@@ -65,7 +61,7 @@ public class DataModel implements Comparable<DataModel>, Serializable {
         return "DataModel{" + "paramName='" + paramName + '\'' +
                 ", objectId=" + objectId +
                 ", paramId=" + paramId +
-                ", aggrId=" + aggrId +
+                ", aggregateId=" + aggregateId +
                 ", startTime=" + startTime +
                 ", data=" + data +
                 '}';
