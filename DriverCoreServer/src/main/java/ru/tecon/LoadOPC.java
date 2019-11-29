@@ -15,6 +15,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.logging.Logger;
 
@@ -229,17 +230,37 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             ResultSet resObjectId = stmObjectId.executeQuery();
             while (resObjectId.next()) {
                 int count = 0;
-                for (String item: config) {
-                    stmUpdateConfig.setString(1, item);
-                    stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + item + "</ItemName>");
-                    stmUpdateConfig.setString(3, resObjectId.getString(1));
+                count = getCount(stmUpdateConfig, resObjectId, count, config);
 
-                    try {
-                        stmUpdateConfig.executeUpdate();
-                        count++;
-                        LOG.info("putConfig Успешная вставка " + item);
-                    } catch (SQLException e) {
-                        LOG.warning("putConfig Запись уже существует " + item);
+                stmUpdateCheck.setString(1, "<" + resObjectId.getString(2) + ">" + count + "</" + resObjectId.getString(2) + ">");
+                stmUpdateCheck.setString(2, "Получено " + count + " элементов по объекту '" + resObjectId.getString(2) + "'.");
+                stmUpdateCheck.setString(3, resObjectId.getString(3));
+
+                stmUpdateCheck.executeUpdate();
+            }
+        } catch (SQLException e) {
+            LOG.warning("putConfig Ошибка обращения к базе " + e.getMessage() +
+                    " config: " + config + " serverName: " + serverName);
+        }
+    }
+
+    @Override
+    public void putConfig(List<String> config, Map<String, List<String>> instantConfig, String serverName) {
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stmObjectId = connect.prepareStatement(SQL_GET_OPC_OBJECT_ID);
+             PreparedStatement stmUpdateConfig = connect.prepareStatement(SQL_INSERT_CONFIG);
+             PreparedStatement stmUpdateCheck = connect.prepareStatement(SQL_UPDATE_CHECK)) {
+            stmObjectId.setString(1, "%<Server>" + serverName + "</Server>");
+
+            ResultSet resObjectId = stmObjectId.executeQuery();
+            while (resObjectId.next()) {
+                int count = 0;
+                count = getCount(stmUpdateConfig, resObjectId, count, config);
+
+                for (String key: instantConfig.keySet()) {
+                    if (resObjectId.getString(2).contains(key)) {
+                        count = getCount(stmUpdateConfig, resObjectId, count, instantConfig.get(key));
+                        break;
                     }
                 }
 
@@ -253,6 +274,23 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             LOG.warning("putConfig Ошибка обращения к базе " + e.getMessage() +
                     " config: " + config + " serverName: " + serverName);
         }
+    }
+
+    private int getCount(PreparedStatement stmUpdateConfig, ResultSet resObjectId, int count, List<String> config) throws SQLException {
+        for (String item: config) {
+            stmUpdateConfig.setString(1, item);
+            stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + item + "</ItemName>");
+            stmUpdateConfig.setString(3, resObjectId.getString(1));
+
+            try {
+                stmUpdateConfig.executeUpdate();
+                count++;
+                LOG.info("putConfig Успешная вставка " + item);
+            } catch (SQLException e) {
+                LOG.warning("putConfig Запись уже существует " + item);
+            }
+        }
+        return count;
     }
 
     @Override
