@@ -75,9 +75,9 @@ public interface LoadOPCRemote {
     Future<Void> putData(List<DataModel> paramList);
 
     /**
-     * Метод для выгрузки списка URI по которым база запросила конфигурацию сервера
+     * Метод для выгрузки списка URL по которым база запросила конфигурацию сервера
      * @param serverName имя сервера
-     * @return список URI
+     * @return список URL
      */
-    ArrayList<String> getURIToLoadConfig(String serverName);
+    ArrayList<String> getURLToLoadConfig(String serverName);
 }

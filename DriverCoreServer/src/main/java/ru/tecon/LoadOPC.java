@@ -60,7 +60,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
 
     /**
-     * select для определения списка URI <br>
+     * select для определения списка URL <br>
      * по которым база запросила конфигурацию сервера <br>
      * параметр - {@code %<Server>'имя сервера'</Server>}
      */
@@ -201,7 +201,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     }
 
     @Override
-    public ArrayList<String> getURIToLoadConfig(String serverName) {
+    public ArrayList<String> getURLToLoadConfig(String serverName) {
         ArrayList<String> result = new ArrayList<>();
         try (Connection connect = ds.getConnection();
              PreparedStatement stm = connect.prepareStatement(SQL_GET_REQUEST_LOAD_CONFIG)) {
