@@ -59,6 +59,16 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
 
     /**
+     * select для определения списка URI <br>
+     * по которым база запросила конфигурацию сервера <br>
+     * параметр - {@code %<Server>'имя сервера'</Server>}
+     */
+    private static final String SQL_GET_REQUEST_LOAD_CONFIG = "select regexp_substr(args, '<ItemName>.*</ItemName>') " +
+            "from arm_commands where kind = 'ForceBrowse' and args like ? and is_success_execution is null";
+
+
+
+    /**
      * select выгружает id запросов на конфигурацию сервера <br>
      * id и имя объектов сервера <br>
      * параметро - {@code %<Server>'имя сервера'</Server>}
@@ -186,6 +196,24 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
         } catch (SQLException e) {
             LOG.warning("isLoadConfig Ошибка обращения к базе " + e.getMessage() + " serverName: " + serverName);
             return false;
+        }
+    }
+
+    @Override
+    public List<String> getURIToLoadConfig(String serverName) {
+        List<String> result = new ArrayList<>();
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stm = connect.prepareStatement(SQL_GET_REQUEST_LOAD_CONFIG)) {
+            stm.setString(1, "%<Server>" + serverName + "</Server>");
+
+            ResultSet res = stm.executeQuery();
+            while (res.next()) {
+                result.add(res.getString(1).split("_")[1]);
+            }
+            return result;
+        } catch (SQLException e) {
+            LOG.warning("Ошибка обращения к базе " + e.getMessage() + " serverName: " + serverName);
+            return result;
         }
     }
 
