@@ -69,5 +69,5 @@ public interface LoadOPCRemote {
      * @param serverName имя сервера
      * @return список URI
      */
-    List<String> getURIToLoadConfig(String serverName);
+    ArrayList<String> getURIToLoadConfig(String serverName);
 }

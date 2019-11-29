@@ -200,8 +200,8 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     }
 
     @Override
-    public List<String> getURIToLoadConfig(String serverName) {
-        List<String> result = new ArrayList<>();
+    public ArrayList<String> getURIToLoadConfig(String serverName) {
+        ArrayList<String> result = new ArrayList<>();
         try (Connection connect = ds.getConnection();
              PreparedStatement stm = connect.prepareStatement(SQL_GET_REQUEST_LOAD_CONFIG)) {
             stm.setString(1, "%<Server>" + serverName + "</Server>");
