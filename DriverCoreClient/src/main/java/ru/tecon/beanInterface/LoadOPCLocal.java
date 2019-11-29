@@ -63,4 +63,11 @@ public interface LoadOPCLocal {
      * @return ничего не возращается
      */
     Future<Void> putData(List<DataModel> paramList);
+
+    /**
+     * Метод для выгрузки списка URI по которым база запросила конфигурацию сервера
+     * @param serverName имя сервера
+     * @return список URI
+     */
+    List<String> getURIToLoadConfig(String serverName);
 }
