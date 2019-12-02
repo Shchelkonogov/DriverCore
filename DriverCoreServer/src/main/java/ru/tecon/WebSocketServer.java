@@ -42,6 +42,11 @@ public class WebSocketServer {
         LOG.info("onMessage: " + message);
     }
 
+    /**
+     * Метод отсылает собщение по определенному адресу, если с ним есть связь
+     * @param to адрес
+     * @param message сообщение
+     */
     public static void sendTo(String to, String message) {
         LOG.info("sendTo: " + to + " message: " + message);
         synchronized (SESSIONS) {
