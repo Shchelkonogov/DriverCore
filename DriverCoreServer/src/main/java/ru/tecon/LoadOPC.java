@@ -111,7 +111,8 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             "from tsa_linked_element b, tsa_opc_element c " +
             "where b.opc_element_id in (select id from tsa_opc_element where opc_object_id = ?) " +
             "and b.opc_element_id = c.id " +
-            "and exists(select a.obj_id, a.par_id from dz_par_dev_link a where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id)";
+            "and exists(select a.obj_id, a.par_id from dz_par_dev_link a where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id) " +
+            "and b.aspid_agr_id is not null";
     /**
      * select для получения даты с которой нужны значения по парамтерам <br>
      * первый параметр - id объекта <br>
@@ -126,6 +127,39 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * function для загрузки значений в базу принимает массив T_DZ_UTIL_INPUT_DATA типа T_DZ_UTIL_INPUT_DATA_ROW
      */
     private static final String SQL_INSERT_DATA = "{call dz_util1.input_data(?)}";
+
+
+    /**
+     * select objectId по которым надо запустить загрузку мгновенных данных
+     * параметр - имя сервера
+     */
+    private static final String SQL_CHECK_INSTANT_LOAD = "select to_number(replace(replace(args, '<ObjectId>', ''), '</ObjectId>', '')) from arm_commands " +
+            "where to_number(replace(replace(args, '<ObjectId>', ''), '</ObjectId>', '')) " +
+            "in (select id from opc_object where linked = 1 and server_name = ?) " +
+            "and kind = 'AsyncRefresh' and is_success_execution is null";
+    /**
+     * select url по котрым надо загрузить мгновенные данные
+     * парметр - objectId
+     */
+    private static final String SQL_GET_URL_TO_LOAD_INSTANT_DATA = "select display_name from tsa_opc_object " +
+            "where id = (select opc_object_id from tsa_linked_object " +
+            "where subscribed = 1 and aspid_object_id = ?)";
+
+
+    /**
+     * select для получения списка парамтров для выгрузки мгновенных данных <br>
+     * параметр - имя сервера '_' url адрес '%'
+     */
+    private static final String SQL_GET_LINKED_PARAMETERS_FOR_INSTANT_DATA = "select c.display_name, b.aspid_object_id, " +
+            "b.aspid_param_id, b.aspid_agr_id, b.measure_unit_transformer " +
+            "from tsa_linked_element b, tsa_opc_element c " +
+            "where b.opc_element_id in (select id from tsa_opc_element " +
+            "where opc_object_id = (select id from tsa_opc_object " +
+            "where display_name like ?)) " +
+            "and b.opc_element_id = c.id " +
+            "and exists(select a.obj_id, a.par_id from dz_par_dev_link a " +
+            "where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id) " +
+            "and b.aspid_agr_id is null";
 
     @Resource(name = "jdbc/DataSource")
     private DataSource ds;
@@ -379,10 +413,45 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                         " values; put time: " + (System.currentTimeMillis() - timer));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
             LOG.warning("putData error upload: " + e.getMessage() + " " + paramList);
         }
         return null;
+    }
+
+    @Override
+    public void checkInstantRequest(String serverName) {
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stmGetObjectId = connect.prepareStatement(SQL_CHECK_INSTANT_LOAD);
+             PreparedStatement stmGetUrl = connect.prepareStatement(SQL_GET_URL_TO_LOAD_INSTANT_DATA)) {
+            stmGetObjectId.setString(1, serverName);
+            ResultSet resObjectId = stmGetObjectId.executeQuery();
+            while (resObjectId.next()) {
+                stmGetUrl.setInt(1, resObjectId.getInt(1));
+                ResultSet resUrl = stmGetUrl.executeQuery();
+                if (resUrl.next()) {
+                    WebSocketServer.sendTo(serverName, "loadInstantData " + resUrl.getString(1).split("_")[1]);
+                }
+            }
+        } catch (SQLException e) {
+            LOG.warning("error when check instant request: " + e.getMessage() + " serverName: " + serverName);
+        }
+    }
+
+    @Override
+    public ArrayList<DataModel> loadObjectInstantParameters(String serverName, String url) {
+        ArrayList<DataModel> result = new ArrayList<>();
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stm = connect.prepareStatement(SQL_GET_LINKED_PARAMETERS_FOR_INSTANT_DATA)) {
+            stm.setString(1, serverName + '_' + url + '%');
+            ResultSet res = stm.executeQuery();
+            while (res.next()) {
+                result.add(new DataModel(res.getString(1), res.getInt(2), res.getInt(3), res.getInt(4),
+                        null, (res.getString(5) == null) ? null : res.getString(5).substring(2)));
+            }
+        } catch (SQLException e) {
+            LOG.warning("error while load instant data parameters: " + e.getMessage());
+        }
+        return result;
     }
 
     /**

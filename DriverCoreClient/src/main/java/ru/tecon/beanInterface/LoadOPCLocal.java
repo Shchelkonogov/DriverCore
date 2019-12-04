@@ -80,4 +80,20 @@ public interface LoadOPCLocal {
      * @return список URL
      */
     ArrayList<String> getURLToLoadConfig(String serverName);
+
+    /**
+     * Метод для проверки запроса от базы на мгновенные данные.
+     * Если есть запрос, то через websocket обращается к нужному серверу
+     * @param serverName имя сервера
+     */
+    void checkInstantRequest(String serverName);
+
+    /**
+     * Метод выгружает из базы список мгновенных параметров для
+     * получения по ним значений
+     * @param serverName имя сервера
+     * @param url url контроллера
+     * @return список параметров
+     */
+    ArrayList<DataModel> loadObjectInstantParameters(String serverName, String url);
 }
