@@ -1,5 +1,7 @@
 package ru.tecon.server;
 
+import ru.tecon.ControllerConfig;
+import ru.tecon.ProjectProperty;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.model.ParseDataModel;
 
@@ -14,12 +16,12 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
-class Utils {
+public class Utils {
 
-    static LoadOPCRemote loadRMI() throws NamingException {
+    public static LoadOPCRemote loadRMI() throws NamingException {
         Hashtable<String, String> ht = new Hashtable<>();
         ht.put(Context.INITIAL_CONTEXT_FACTORY, "weblogic.jndi.WLInitialContextFactory");
-        ht.put(Context.PROVIDER_URL, "t3://localhost:7001");
+        ht.put(Context.PROVIDER_URL, "t3://" + ProjectProperty.getServerURI() + ":" + ProjectProperty.getServerPort());
 
         Context ctx = new InitialContext(ht);
 
@@ -186,7 +188,7 @@ class Utils {
                 }
                 result.add("");
 
-                List<String> parameters = EchoSocketServer.getConfigNames(String.valueOf(bufferNumber), String.valueOf(eventCode));
+                List<String> parameters = ControllerConfig.getConfigNames(String.valueOf(bufferNumber), String.valueOf(eventCode));
 
                 if ((parameters != null) && (parameters.size() == parseData.size())) {
                     Map<String, Object> mapData = new HashMap<>();
@@ -206,7 +208,7 @@ class Utils {
 
         System.out.println("repeatCount " + repeatCount);
 
-        Files.write(Paths.get(EchoSocketServer.getLogFolder() + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS")) + ".txt"), result);
+        Files.write(Paths.get(ProjectProperty.getLogFolder() + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS")) + ".txt"), result);
 
         return repeatCount;
     }
