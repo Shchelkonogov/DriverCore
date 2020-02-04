@@ -279,6 +279,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     }
 
     @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public void putConfig(List<String> config, Map<String, List<String>> instantConfig, String serverName) {
         try (Connection connect = ds.getConnection();
              PreparedStatement stmObjectId = connect.prepareStatement(SQL_GET_OPC_OBJECT_ID);
