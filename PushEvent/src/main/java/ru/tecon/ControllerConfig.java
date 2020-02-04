@@ -56,8 +56,10 @@ public class ControllerConfig {
             }
             if (line.trim().startsWith("#")) {
                 if ((key1 != null) && (key2 != null)) {
-                    if (line.trim().split(":").length == 2) {
-                        config.get(key1).get(key2).add(line.trim().split(":")[1] + ":" + line.trim().split(":")[0].substring(1));
+                    if (line.trim().split(",").length == 7) {
+                        config.get(key1).get(key2).add(line.trim().split(",")[6] + ":" +
+                                line.trim().split(",")[0].substring(1) + ":" +
+                                line.trim().split(",")[3]);
                     }
                 }
             }
