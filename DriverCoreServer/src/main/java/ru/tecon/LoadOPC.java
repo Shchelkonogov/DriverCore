@@ -9,6 +9,7 @@ import ru.tecon.model.ValueModel;
 import javax.annotation.Resource;
 import javax.ejb.*;
 import javax.sql.DataSource;
+import java.math.BigDecimal;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -160,6 +161,17 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             "and exists(select a.obj_id, a.par_id from dz_par_dev_link a " +
             "where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id) " +
             "and b.aspid_agr_id is null";
+
+
+    /**
+     * select для получения последнего известного значения по параметру <br>
+     * первый параметр - id объекта <br>
+     * второй параметр - id параметра <br>
+     * третий параметр - id агрегата
+     */
+    private static final String SQL_GET_LAST_VALUE = "select par_value from dz_input_start " +
+            "where obj_id = ? and par_id = ? and stat_aggr = ?";
+
 
     @Resource(name = "jdbc/DataSource")
     private DataSource ds;
@@ -417,6 +429,77 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             LOG.warning("putData error upload: " + e.getMessage() + " " + paramList);
         }
         return null;
+    }
+
+    @Override
+    public void putDataWithCalculateIntegrator(List<DataModel> paramList) {
+        if (paramList != null) {
+            paramList.forEach(dataModel -> {
+                String[] splitStr =  dataModel.getParamName().split(":");
+                if (splitStr.length == 3) {
+                    BigDecimal addValue;
+                    BigDecimal newValue;
+                    switch (splitStr[2]) {
+                        case "5":
+                            addValue = getLastValue(dataModel);
+                            for (ValueModel valueModel: dataModel.getData()) {
+                                newValue = new BigDecimal(valueModel.getValue())
+                                        .add(addValue);
+                                valueModel.setValue(newValue.toString());
+                                addValue = newValue;
+                            }
+                            break;
+                        case "6":
+                            addValue = getLastValue(dataModel);
+                            for (ValueModel valueModel: dataModel.getData()) {
+                                newValue = new BigDecimal(valueModel.getValue())
+                                        .multiply(new BigDecimal("60"))
+                                        .add(addValue);
+                                valueModel.setValue(newValue.toString());
+                                addValue = newValue;
+                            }
+                            break;
+                        case "7":
+                            addValue = getLastValue(dataModel);
+                            for (ValueModel valueModel: dataModel.getData()) {
+                                newValue = new BigDecimal(valueModel.getValue())
+                                        .multiply(new BigDecimal("3600"))
+                                        .add(addValue);
+                                valueModel.setValue(newValue.toString());
+                                addValue = newValue;
+                            }
+                            break;
+                    }
+                }
+            });
+
+            putData(paramList);
+        }
+    }
+
+    /**
+     * Метод получает последнее известно значения параметра
+     * @param model данные по параметру
+     * @return последнее известное значение
+     */
+    private BigDecimal getLastValue(DataModel model) {
+        BigDecimal result = new BigDecimal("0");
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stm = connect.prepareStatement(SQL_GET_LAST_VALUE)) {
+            stm.setInt(1, model.getObjectId());
+            stm.setInt(2, model.getParamId());
+            stm.setInt(3, model.getAggregateId());
+
+            ResultSet res = stm.executeQuery();
+            if (res.next()) {
+                if (res.getString(1) != null) {
+                    result = new BigDecimal(res.getString(1));
+                }
+            }
+        } catch (SQLException e) {
+            LOG.warning("Error when load last value of parameter: " + e.getMessage());
+        }
+        return result;
     }
 
     @Override
