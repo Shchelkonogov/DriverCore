@@ -35,18 +35,17 @@ public class Utils {
         System.out.println("data length: " + data.length);
 
         int increment;
-        int bytesCount;
+        int messagesCount;
         switch (protocolVersion) {
             case 2:
-                bytesCount = 2;
+                messagesCount = ByteBuffer.wrap(data, 1, 2).getShort();
                 increment = 1;
                 break;
             case 1:
             default:
-                bytesCount = 1;
+                messagesCount = ByteBuffer.wrap(data, 1, 1).get();
                 increment = 0;
         }
-        int messagesCount = ByteBuffer.wrap(data, 1, bytesCount).getShort();
 
         result.add("messages count: " + messagesCount);
         result.add("");
