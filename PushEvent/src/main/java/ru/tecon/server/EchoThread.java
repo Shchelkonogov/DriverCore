@@ -48,17 +48,25 @@ public class EchoThread extends Thread {
                 // Читаем первые 2 байта в которых указанн размер сообщения
                 byte[] data = new byte[2];
                 if (in.read(data, 0, 2) != -1) {
+                    LOG.info("Thread: " + this.getId() + " Message size: " + Arrays.toString(data));
                     int size = (((data[0] & 0xff) << 8) | (data[1] & 0xff));
 
                     // Читаем сообщение
                     data = new byte[size];
 
-                    if ((size == 0) || (in.read(data, 0, size) == -1)) {
+                    int readBytes = 0;
+                    if (size == 0) {
                         socket.close();
                         LOG.warning("run Error read message Socket close! Thread: " + this.getId() +
                                 " ObjectName: " + objectName);
                         return;
                     }
+                    //Из-за передачи по TCP может не в первом покете прийти данные,
+                    // так что приходится читать в цикле, пока все не прочитется
+                    while (readBytes != size) {
+                        readBytes += in.read(data, readBytes, size - readBytes);
+                    }
+                    LOG.info("Thread: " + this.getId() + " Read bytes: " + readBytes + " Message body: " + Arrays.toString(data));
 
                     int packageType = data[0] & 0xff;
 
@@ -208,7 +216,6 @@ public class EchoThread extends Thread {
             case "10000":
             default:
                 protocolVersion = 1;
-
         }
 
         int direction = data[2] & 0xff;
