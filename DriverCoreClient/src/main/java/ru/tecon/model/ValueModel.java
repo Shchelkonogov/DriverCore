@@ -4,6 +4,12 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.StringJoiner;
 
+/**
+ * Класс для хранения информации о значениях.
+ * Включает в себя само значение.
+ * Дата и время измерения по гринвичу.
+ * Качество измерения по default 192 (хорошее качество)
+ */
 public class ValueModel implements Serializable {
 
     private String value;
@@ -24,7 +30,7 @@ public class ValueModel implements Serializable {
         return value;
     }
 
-    void setValue(String value) {
+    public void setValue(String value) {
         this.value = value;
     }
 

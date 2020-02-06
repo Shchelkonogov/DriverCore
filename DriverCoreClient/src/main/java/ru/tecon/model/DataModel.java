@@ -6,6 +6,15 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Модель данных для загрузки значений в базу.
+ * Включает в себя имя параметра.
+ * id объекта, id параметра, id агрегата,
+ * дата и время с которого требуются данные для базы,
+ * массив для хранения полученных значений.
+ * А так же поле для перевода значений в другую величину
+ * (в данной версси реализовано исклучительно метод умножения)
+ */
 public class DataModel implements Comparable<DataModel>, Serializable {
 
     private String paramName;
@@ -16,7 +25,8 @@ public class DataModel implements Comparable<DataModel>, Serializable {
     private List<ValueModel> data = new ArrayList<>();
     private String incrementValue;
 
-    public DataModel(String paramName, int objectId, int paramId, int aggregateId, LocalDateTime startTime, String incrementValue) {
+    public DataModel(String paramName, int objectId, int paramId, int aggregateId,
+                     LocalDateTime startTime, String incrementValue) {
         this.paramName = paramName;
         this.objectId = objectId;
         this.paramId = paramId;
