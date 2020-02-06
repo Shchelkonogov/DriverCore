@@ -138,7 +138,7 @@ public class EchoThread extends Thread {
 
                             dataModels.removeIf(dataModel -> dataModel.getData().isEmpty());
 
-                            opc.putData(dataModels);
+                            opc.putDataWithCalculateIntegrator(dataModels);
 
                             byte[] response = new byte[messageConfirmSize + 2];
                             response[0] = 0;
@@ -147,9 +147,14 @@ public class EchoThread extends Thread {
 
                             byte[] messageCountArray = ByteBuffer.allocate(4).putInt(messagesCount).array();
 
-                            response[3] = messageCountArray[2];
-                            if (messageConfirmSize == 3) {
-                                response[4] = messageCountArray[3];
+                            switch (messageConfirmSize) {
+                                case 3:
+                                    response[3] = messageCountArray[2];
+                                    response[4] = messageCountArray[3];
+                                    break;
+                                case 2:
+                                default:
+                                    response[3] = messageCountArray[3];
                             }
 
                             LOG.info("run send load message ok: " + Arrays.toString(response) +
