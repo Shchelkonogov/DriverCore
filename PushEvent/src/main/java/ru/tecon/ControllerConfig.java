@@ -4,7 +4,6 @@ import com.jcraft.jsch.*;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.instantData.InstantDataTypes;
 import ru.tecon.server.Utils;
-import ru.tecon.webSocket.WebSocketClient;
 
 import javax.naming.NamingException;
 import java.io.BufferedInputStream;
@@ -13,8 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -27,6 +25,13 @@ public class ControllerConfig {
 
     private static Map<String, Map<String, List<String>>> config = new HashMap<>();
     private static List<String> configList = new ArrayList<>();
+
+    private static ScheduledExecutorService service;
+    private static ScheduledFuture future;
+
+    private ControllerConfig() {
+
+    }
 
     /**
      * Метод парсит текстовый файл конфигурации контроллера
@@ -75,13 +80,22 @@ public class ControllerConfig {
     }
 
     /**
+     * Метод закрывает службу проверки запроса на конфигурацию
+     */
+    public static void stopUploaderService() {
+        if (Objects.nonNull(service)) {
+            future.cancel(true);
+            service.shutdown();
+        }
+    }
+
+    /**
      * Метод запускает службу которая обрабатывает запросы на конфигурацию из базы
      */
     public static void startUploaderService() {
-        if (ProjectProperty.isPushFromDataBase()) {
-            new WebSocketClient().connectToWebSocketServer();
-        } else {
-            Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(() -> {
+        if (!ProjectProperty.isPushFromDataBase()) {
+            service = Executors.newSingleThreadScheduledExecutor();
+            future = service.scheduleWithFixedDelay(() -> {
                 try {
                     LoadOPCRemote opc = Utils.loadRMI();
 
