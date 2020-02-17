@@ -86,6 +86,12 @@ public interface LoadOPCRemote {
     void putDataWithCalculateIntegrator(List<DataModel> paramList);
 
     /**
+     * Метод для загрузки мгновенных значений по парамтерам в базу
+     * @param paramList список параметров со значениями
+     */
+    void putInstantData(List<DataModel> paramList);
+
+    /**
      * Метод для выгрузки списка URL по которым база запросила конфигурацию сервера
      * @param serverName имя сервера
      * @return список URL
