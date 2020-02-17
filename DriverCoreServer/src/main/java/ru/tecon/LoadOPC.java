@@ -11,13 +11,13 @@ import javax.ejb.*;
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.*;
+import java.sql.Date;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Future;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -134,7 +134,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * select objectId по которым надо запустить загрузку мгновенных данных
      * параметр - имя сервера
      */
-    private static final String SQL_CHECK_INSTANT_LOAD = "select to_number(replace(replace(args, '<ObjectId>', ''), '</ObjectId>', '')) from arm_commands " +
+    private static final String SQL_CHECK_INSTANT_LOAD = "select distinct(to_number(replace(replace(args, '<ObjectId>', ''), '</ObjectId>', ''))) from arm_commands " +
             "where to_number(replace(replace(args, '<ObjectId>', ''), '</ObjectId>', '')) " +
             "in (select id from opc_object where linked = 1 and server_name = ?) " +
             "and kind = 'AsyncRefresh' and is_success_execution is null";
@@ -172,6 +172,30 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     private static final String SQL_GET_LAST_VALUE = "select par_value from dz_input_start " +
             "where obj_id = ? and par_id = ? and stat_aggr = ?";
 
+
+    /**
+     * select для получения id запросов на получение мгновенных данных
+     * первый параметр - <ObjectId>id объекта</ObjectId>
+     */
+    private static final String SQL_GET_INSTANT_COMMAND_ID = "select id from arm_commands " +
+            "where args = ? and kind = 'AsyncRefresh' and is_success_execution is null";
+
+    /**
+     * insert для заполнения таблицы мгновенными данными
+     * первый параметр - id объекта
+     * второй параметр - значение параметра
+     * третий параметр - качество значения
+     * четвертый параметр - id параметра
+     * пятый параметр - id запроса на мгновенные данные
+     * шестой параметр - id объекта
+     * седьмой параметр - id параметра
+     */
+    private static final String INSERT_ASYNC_REFRESH_DATA = "insert into arm_async_refresh_data " +
+            "values (?, ?, sysdate - 3/24, ?, ?, ?, sysdate, " +
+            "(select replace(replace(opc_path, '<ItemName>', ''), '</ItemName>', '') " +
+                "from tsa_opc_element where id in (select opc_element_id from tsa_linked_element " +
+                "where aspid_object_id = ? and aspid_param_id = ? and aspid_agr_id is null)), " +
+            "null)";
 
     @Resource(name = "jdbc/DataSource")
     private DataSource ds;
@@ -475,6 +499,64 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
             putData(paramList);
         }
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public void putInstantData(List<DataModel> paramList) {
+        try (Connection connection = ds.getConnection();
+             PreparedStatement stmGetId = connection.prepareStatement(SQL_GET_INSTANT_COMMAND_ID);
+             PreparedStatement stmUpdate = connection.prepareStatement(SQL_UPDATE_CHECK);
+             PreparedStatement stmInsert = connection.prepareStatement(INSERT_ASYNC_REFRESH_DATA)) {
+            Set<Integer> objectsId = new HashSet<>();
+            paramList.forEach(model -> objectsId.add(model.getObjectId()));
+
+            for (Integer id: objectsId) {
+                int count = 0;
+                for (DataModel model: paramList) {
+                    if (model.getObjectId() == id) {
+                        count += model.getData().size();
+                    }
+                }
+
+                stmGetId.setString(1, "<ObjectId>" + id + "</ObjectId>");
+
+                ResultSet res = stmGetId.executeQuery();
+                while (res.next()) {
+                    stmUpdate.setString(1, "<" + id + ">" + count + "</" + id + ">");
+                    stmUpdate.setString(2, "Получено " + count + " элементов по объекту '" + id + "'.");
+                    stmUpdate.setString(3, res.getString(1));
+
+                    stmUpdate.executeUpdate();
+
+                    for (DataModel model: paramList) {
+                        if (model.getObjectId() == id) {
+                            for (ValueModel valueModel: model.getData()) {
+                                stmInsert.setInt(1, id);
+                                stmInsert.setString(2, valueModel.getValue());
+                                stmInsert.setInt(3, valueModel.getQuality());
+                                stmInsert.setInt(4, model.getParamId());
+                                stmInsert.setString(5, res.getString(1));
+                                stmInsert.setInt(6, id);
+                                stmInsert.setInt(7, model.getParamId());
+
+                                stmInsert.addBatch();
+                            }
+                        }
+                    }
+
+                    int[] size = stmInsert.executeBatch();
+
+                    LOG.info("Вставил " + size.length + " мгновенных значений значений по объекту " + id +
+                            ". Номер запроса " + res.getString(1));
+                }
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.WARNING, "Ошибка импорта мгновенных данных в базу", e);
+            return;
+        }
+
+        putData(paramList);
     }
 
     /**
