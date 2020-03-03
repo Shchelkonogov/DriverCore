@@ -1,8 +1,12 @@
-package ru.tecon.model;
+package ru.tecon.server.model;
 
 import java.time.LocalDateTime;
 import java.util.*;
 
+/**
+ * Класс данных для использования в разборе
+ * архивных данных от pushEvents
+ */
 public class ParseDataModel implements Comparable<ParseDataModel> {
 
     private LocalDateTime date;
