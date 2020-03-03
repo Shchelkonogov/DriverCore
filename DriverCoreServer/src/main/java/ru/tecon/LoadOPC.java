@@ -134,8 +134,8 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * select objectId по которым надо запустить загрузку мгновенных данных
      * параметр - имя сервера
      */
-    private static final String SQL_CHECK_INSTANT_LOAD = "select distinct(to_number(replace(replace(args, '<ObjectId>', ''), '</ObjectId>', ''))) from arm_commands " +
-            "where to_number(replace(replace(args, '<ObjectId>', ''), '</ObjectId>', '')) " +
+    private static final String SQL_CHECK_INSTANT_LOAD = "select distinct(to_number(extractValue(XMLType(args), '/ObjectId'))) " +
+            "from arm_commands where to_number(extractValue(XMLType(args), '/ObjectId')) " +
             "in (select id from opc_object where linked = 1 and server_name = ?) " +
             "and kind = 'AsyncRefresh' and is_success_execution is null";
     /**
@@ -192,7 +192,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      */
     private static final String INSERT_ASYNC_REFRESH_DATA = "insert into arm_async_refresh_data " +
             "values (?, ?, sysdate - 3/24, ?, ?, ?, sysdate, " +
-            "(select replace(replace(opc_path, '<ItemName>', ''), '</ItemName>', '') " +
+            "(select extractValue(XMLType(opc_path), '/ItemName') " +
                 "from tsa_opc_element where id in (select opc_element_id from tsa_linked_element " +
                 "where aspid_object_id = ? and aspid_param_id = ? and aspid_agr_id is null)), " +
             "null)";
