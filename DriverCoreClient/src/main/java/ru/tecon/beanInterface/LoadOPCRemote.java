@@ -6,6 +6,7 @@ import javax.ejb.Remote;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
 
 /**
@@ -47,7 +48,7 @@ public interface LoadOPCRemote {
      *               которые может отдавать сервер)
      * @param serverName имя сервера
      */
-    void putConfig(List<String> config, String serverName);
+    void putConfig(Set<String> config, String serverName);
 
     /**
      * Метод выгружает конфигурацию сервера в базу
@@ -56,7 +57,7 @@ public interface LoadOPCRemote {
      * @param instantConfig конфигурация мгновенных данный от приборов
      * @param serverName имя сервера
      */
-    void putConfig(List<String> config, Map<String, List<String>> instantConfig, String serverName);
+    void putConfig(Set<String> config, Map<String, Set<String>> instantConfig, String serverName);
 
     /**
      * Метод выгружает из базы список параметров для
