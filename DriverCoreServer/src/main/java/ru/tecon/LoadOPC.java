@@ -107,12 +107,15 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * select для получения списка парамтров для выгрузки данных <br>
      * параметр - opc_id
      */
-    private static final String SQL_GET_LINKED_PARAMETERS = "select c.display_name, b.aspid_object_id, b.aspid_param_id, " +
-            "b.aspid_agr_id, b.measure_unit_transformer " +
+    private static final String SQL_GET_LINKED_PARAMETERS = "select c.display_name || " +
+                "nvl2(extractValue(XMLType('<Group>' || opc_path || '</Group>'), '/Group/SysInfo'), " +
+                    "'::' || extractValue(XMLType('<Group>' || opc_path || '</Group>'), '/Group/SysInfo'), ''), " +
+            "b.aspid_object_id, b.aspid_param_id, b.aspid_agr_id, b.measure_unit_transformer " +
             "from tsa_linked_element b, tsa_opc_element c " +
             "where b.opc_element_id in (select id from tsa_opc_element where opc_object_id = ?) " +
             "and b.opc_element_id = c.id " +
-            "and exists(select a.obj_id, a.par_id from dz_par_dev_link a where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id) " +
+            "and exists(select a.obj_id, a.par_id from dz_par_dev_link a " +
+                        "where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id) " +
             "and b.aspid_agr_id is not null";
     /**
      * select для получения даты с которой нужны значения по парамтерам <br>
@@ -151,15 +154,17 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * select для получения списка парамтров для выгрузки мгновенных данных <br>
      * параметр - имя сервера '_' url адрес '%'
      */
-    private static final String SQL_GET_LINKED_PARAMETERS_FOR_INSTANT_DATA = "select c.display_name, b.aspid_object_id, " +
-            "b.aspid_param_id, b.aspid_agr_id, b.measure_unit_transformer " +
+    private static final String SQL_GET_LINKED_PARAMETERS_FOR_INSTANT_DATA = "select c.display_name || " +
+                "nvl2(extractValue(XMLType('<Group>' || opc_path || '</Group>'), '/Group/SysInfo'), " +
+                    "'::' || extractValue(XMLType('<Group>' || opc_path || '</Group>'), '/Group/SysInfo'), ''), " +
+            "b.aspid_object_id, b.aspid_param_id, b.aspid_agr_id, b.measure_unit_transformer " +
             "from tsa_linked_element b, tsa_opc_element c " +
             "where b.opc_element_id in (select id from tsa_opc_element " +
-            "where opc_object_id = (select id from tsa_opc_object " +
-            "where display_name like ?)) " +
+                                        "where opc_object_id = (select id from tsa_opc_object " +
+                                                                "where display_name like ?)) " +
             "and b.opc_element_id = c.id " +
             "and exists(select a.obj_id, a.par_id from dz_par_dev_link a " +
-            "where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id) " +
+                        "where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id) " +
             "and b.aspid_agr_id is null";
 
 
@@ -290,7 +295,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
     @Override
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
-    public void putConfig(List<String> config, String serverName) {
+    public void putConfig(Set<String> config, String serverName) {
         try (Connection connect = ds.getConnection();
              PreparedStatement stmObjectId = connect.prepareStatement(SQL_GET_OPC_OBJECT_ID);
              PreparedStatement stmUpdateConfig = connect.prepareStatement(SQL_INSERT_CONFIG);
@@ -316,7 +321,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
     @Override
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
-    public void putConfig(List<String> config, Map<String, List<String>> instantConfig, String serverName) {
+    public void putConfig(Set<String> config, Map<String, Set<String>> instantConfig, String serverName) {
         try (Connection connect = ds.getConnection();
              PreparedStatement stmObjectId = connect.prepareStatement(SQL_GET_OPC_OBJECT_ID);
              PreparedStatement stmUpdateConfig = connect.prepareStatement(SQL_INSERT_CONFIG);
@@ -347,10 +352,16 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
         }
     }
 
-    private int getCount(PreparedStatement stmUpdateConfig, ResultSet resObjectId, int count, List<String> config) throws SQLException {
+    private int getCount(PreparedStatement stmUpdateConfig, ResultSet resObjectId, int count, Set<String> config) throws SQLException {
         for (String item: config) {
-            stmUpdateConfig.setString(1, item);
-            stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + item + "</ItemName>");
+            String[] items = item.split("::");
+            if (items.length == 2) {
+                stmUpdateConfig.setString(1, items[0]);
+                stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + items[0] + "</ItemName><SysInfo>" + items[1] + "</SysInfo>");
+            } else {
+                stmUpdateConfig.setString(1, item);
+                stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + item + "</ItemName>");
+            }
             stmUpdateConfig.setString(3, resObjectId.getString(1));
 
             try {
@@ -459,11 +470,11 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     public void putDataWithCalculateIntegrator(List<DataModel> paramList) {
         if (paramList != null) {
             paramList.forEach(dataModel -> {
-                String[] splitStr =  dataModel.getParamName().split(":");
-                if (splitStr.length == 3) {
+                String[] splitStr =  dataModel.getParamName().split("::");
+                if (splitStr.length == 2) {
                     BigDecimal addValue;
                     BigDecimal newValue;
-                    switch (splitStr[2]) {
+                    switch (splitStr[1]) {
                         case "5":
                             addValue = getLastValue(dataModel);
                             for (ValueModel valueModel: dataModel.getData()) {
