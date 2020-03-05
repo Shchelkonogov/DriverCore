@@ -3,7 +3,6 @@ package ru.tecon;
 import com.jcraft.jsch.*;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.instantData.InstantDataTypes;
-import ru.tecon.server.Utils;
 
 import javax.naming.NamingException;
 import java.io.BufferedInputStream;
@@ -24,7 +23,7 @@ public class ControllerConfig {
     private static final Logger LOG = Logger.getLogger(ControllerConfig.class.getName());
 
     private static Map<String, Map<String, List<String>>> config = new HashMap<>();
-    private static List<String> configList = new ArrayList<>();
+    private static Set<String> configList = new HashSet<>();
 
     private static ScheduledExecutorService service;
     private static ScheduledFuture future;
@@ -62,8 +61,20 @@ public class ControllerConfig {
             if (line.trim().startsWith("#")) {
                 if ((key1 != null) && (key2 != null)) {
                     if (line.trim().split(",").length == 7) {
+                        String addName = "";
+                        switch (line.trim().split(",")[3]) {
+                            case "5":
+                                addName = ":i";
+                                break;
+                            case "6":
+                                addName = ":iMinToSec";
+                                break;
+                            case "7":
+                                addName = ":iHourToSec";
+                                break;
+                        }
                         config.get(key1).get(key2).add(line.trim().split(",")[6] + ":" +
-                                line.trim().split(",")[0].substring(1) + ":" +
+                                line.trim().split(",")[0].substring(1) + addName + "::" +
                                 line.trim().split(",")[3]);
                     }
                 }
@@ -102,7 +113,7 @@ public class ControllerConfig {
                     List<String> urlList = opc.getURLToLoadConfig(ProjectProperty.getServerName());
 
                     if (!urlList.isEmpty()) {
-                        Map<String, List<String>> urlConfig = new HashMap<>();
+                        Map<String, Set<String>> urlConfig = new HashMap<>();
                         urlList.forEach(s -> urlConfig.put(s, getInstantConfigFromURL(s)));
 
                         opc.putConfig(configList, urlConfig, ProjectProperty.getServerName());
@@ -119,7 +130,7 @@ public class ControllerConfig {
      */
     public static void uploadConfig(String url) {
         try {
-            Map<String, List<String>> urlConfig = new HashMap<>();
+            Map<String, Set<String>> urlConfig = new HashMap<>();
             urlConfig.put(url, getInstantConfigFromURL(url));
 
             Utils.loadRMI().putConfig(configList, urlConfig, ProjectProperty.getServerName());
