@@ -15,6 +15,7 @@ public class ProjectProperty {
     private static int port;
     private static int instantPort;
     private static String configFile;
+    private static String instantConfigFile;
     private static String serverName;
     private static String logFolder;
     private static String serverURI;
@@ -34,6 +35,7 @@ public class ProjectProperty {
             port = Integer.parseInt(prop.getProperty("port"));
             instantPort = Integer.parseInt(prop.getProperty("instantPort"));
             configFile = prop.getProperty("configFile");
+            instantConfigFile = prop.getProperty("instantFile");
             serverName = prop.getProperty("serverName");
             logFolder = prop.getProperty("logFolder");
             serverURI = prop.getProperty("serverURI");
@@ -59,7 +61,7 @@ public class ProjectProperty {
         return port;
     }
 
-    public static String getConfigFile() {
+    static String getConfigFile() {
         return configFile;
     }
 
@@ -85,5 +87,9 @@ public class ProjectProperty {
 
     public static int getInstantPort() {
         return instantPort;
+    }
+
+    public static String getInstantConfigFile() {
+        return instantConfigFile;
     }
 }
