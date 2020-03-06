@@ -237,7 +237,7 @@ public class ControllerConfig {
                                 }
 
                                 // Определяю нужное поле в структурном типе
-                                String subField = fieldsList.stream().filter(s -> s.contains(globalConfigItem.substring(globalConfigItem.lastIndexOf("_") + 1)))
+                                String subField = fieldsList.stream().filter(s -> s.substring(s.indexOf("=") + 1).split(",")[0].equals(globalConfigItem.substring(globalConfigItem.lastIndexOf("_") + 1)))
                                         .findFirst().orElse(null);
 
                                 if (subField != null) {
