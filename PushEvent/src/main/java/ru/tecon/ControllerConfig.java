@@ -148,8 +148,8 @@ public class ControllerConfig {
      * @param url url прибора
      * @return список параметров конфигурации
      */
-    private static List<String> getInstantConfigFromURL(String url) {
-        List<String> result = new ArrayList<>();
+    private static Set<String> getInstantConfigFromURL(String url) {
+        Set<String> result = new HashSet<>();
 
         try {
             Properties prop = new Properties();
@@ -175,25 +175,112 @@ public class ControllerConfig {
             }
 
             String types = sb.substring(sb.indexOf("[TYPE]") + "[TYPE]".length(), sb.indexOf("[DEVTYP]"));
-            Map<Integer, String> tMap = Arrays.stream(types.split("\n"))
-                    .filter(s -> {
-                        if (s.startsWith("T")) {
-                            for (InstantDataTypes type: InstantDataTypes.values()) {
-                                if (s.substring(s.indexOf('=') + 1, s.indexOf(',')).equals(type.name())) {
-                                    return true;
-                                }
-                            }
-                        }
-                        return false;
-                    })
-                    .map(s -> s.substring(1).split(",")[0])
-                    .collect(Collectors.toMap(k -> Integer.parseInt(k.substring(0, k.indexOf("="))), v -> v.substring(v.indexOf("=") + 1)));
 
             String variables = sb.substring(sb.indexOf("[VARIABLE]") + "[VARIABLE]".length(), sb.indexOf("[END]"));
-            result = Arrays.stream(variables.split("\n"))
-                    .filter(s -> s.startsWith("V") && tMap.keySet().contains(Integer.parseInt(s.split(",")[6])))
-                    .map(s -> s.substring(s.indexOf("=") + 1).split(",")[0] + ":" + tMap.get(Integer.parseInt(s.split(",")[6])) + ":Текущие данные")
+
+            List<String> globalConfig = new LinkedList<>(Files.readAllLines(Paths.get(ProjectProperty.getInstantConfigFile())));
+            globalConfig.removeIf(s -> s.trim().isEmpty());
+
+            List<String> typesList = new LinkedList<>(Arrays.asList(types.split("\n")));
+            typesList.removeIf(s -> !(s.startsWith("T") || s.startsWith("F")));
+
+            List<String> variablesList = new LinkedList<>(Arrays.asList(variables.split("\n")));
+            variablesList.removeIf(s -> !s.startsWith("V"));
+
+            List<String> simpleTypes = Arrays.stream(InstantDataTypes.values())
+                    .map(Enum::name)
                     .collect(Collectors.toList());
+
+            outer: for (String globalConfigItem: globalConfig) {
+                for (Iterator<String> it = variablesList.iterator(); it.hasNext();) {
+                    String variableItem = it.next();
+                    String variableItemName = variableItem.substring(variableItem.indexOf("=") + 1).split(",")[0];
+                    if (globalConfigItem.equals(variableItemName)) {
+                        // Если имена совпадают полностью то вытаскиваем тип
+                        String type = typesList.stream().filter(s -> s.startsWith("T" + variableItem.split(",")[6]))
+                                .findFirst().orElse(null);
+
+                        // Проверяем что тип найден и он пройтой из реализованных в драйвере
+                        if (type != null) {
+                            String typeName = type.substring(type.indexOf("=") + 1).split(",")[0];
+                            if (type.split(",")[1].equals("0") && simpleTypes.contains(typeName)) {
+                                // Формат записи имя переменной :Текущие данные:: имя типа
+                                result.add(globalConfigItem + ":Текущие данные::" + typeName);
+                            } else {
+                                LOG.warning(globalConfigItem + " " + variableItemName + " тип не простой или тип не реализован");
+                            }
+                        } else {
+                            LOG.warning(globalConfigItem + " " + variableItemName + " не нашел тип");
+                        }
+
+                        it.remove();
+                        continue outer;
+                    } else {
+                        // Если имена совпадают если откинуть последнию часть после "_"
+                        if (globalConfigItem.contains("_") &&
+                                globalConfigItem.substring(0, globalConfigItem.lastIndexOf("_")).equals(variableItemName)) {
+
+                            // Вытаскиваю тип данных
+                            String type = typesList.stream().filter(s -> s.startsWith("T" + variableItem.split(",")[6]))
+                                    .findFirst().orElse(null);
+
+                            // Проверяю что тип существует и он соответствует структурному типу
+                            if ((type != null) && type.split(",")[1].equals("2")) {
+                                // Вытаскиваю массив полей структурного типа
+                                List<String> fieldsList = new ArrayList<>();
+                                for (int i = typesList.indexOf(type) + 1; i < typesList.size(); i++) {
+                                    if (typesList.get(i).startsWith("T")) {
+                                        break;
+                                    } else {
+                                        fieldsList.add(typesList.get(i));
+                                    }
+                                }
+
+                                // Определяю нужное поле в структурном типе
+                                String subField = fieldsList.stream().filter(s -> s.contains(globalConfigItem.substring(globalConfigItem.lastIndexOf("_") + 1)))
+                                        .findFirst().orElse(null);
+
+                                if (subField != null) {
+                                    // Если нужное поле содержит 4 значения то это String тип и из него надо вытащить длину для String
+                                    String addValue = "";
+                                    if (subField.split(",").length == 4) {
+                                        addValue = ":" + subField.split(",")[3];
+                                    }
+
+                                    // Определяю какого простого типа поле
+                                    String subType = typesList.stream().filter(s -> s.startsWith("T" + subField.split(",")[1]))
+                                            .findFirst().orElse(null);
+
+                                    // Проверяем что тип найден и он пройтой из реализованных в драйвере
+                                    if (subType != null) {
+                                        String subTypeName = subType.substring(subType.indexOf("=") + 1).split(",")[0];
+                                        if (subType.split(",")[1].equals("0") && simpleTypes.contains(subTypeName)) {
+                                            // Формат записи имя переменной :Текущие данные:: имя типа : длина типа : смещение в типе под нужное поле :
+                                            // имя простого типа : если простой тип String то длина этой String
+                                            result.add(globalConfigItem + ":Текущие данные::" +
+                                                    type.substring(type.indexOf("=") + 1).split(",")[0] + ":" +
+                                                    type.split(",")[2] + ":" +
+                                                    subField.split(",")[2] + ":" +
+                                                    subTypeName +
+                                                    addValue);
+
+                                            continue outer;
+                                        } else {
+                                            LOG.warning(globalConfigItem + " " + variableItemName + " тип переменной функционального блока не простой или тип не реализован");
+                                        }
+                                    } else {
+                                        LOG.warning(globalConfigItem + " " + variableItemName + " не нашел тип");
+                                    }
+                                } else {
+                                    LOG.warning(globalConfigItem + " " + variableItemName + " не нашел нужную переменную в функциональном блоке");
+                                }
+                            } else {
+                                LOG.warning(globalConfigItem + " " + variableItemName + " не нашел тип или тип не структура");
+                            }
+                        }
+                    }
+                }
+            }
 
             channel.disconnect();
             session.disconnect();
