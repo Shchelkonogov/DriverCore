@@ -1,26 +1,15 @@
 package ru.tecon.instantData;
 
+/**
+ * Перечисление простых типов для которых реализован алгоритм чтения данных
+ */
 public enum InstantDataTypes {
 
-    LWORD(8),
-    DATE(4),
-    ULINT(8),
-    UDINT(4),
-    UINT(2),
-    USINT(1),
-    LINT(8),
-    LREAL(8),
-    STRING(1),
+//    STRING(1),
     BOOL(1),
-    TIME(4),
     REAL(4),
     DINT(4),
-    INT(2),
-    SINT(1),
-    DWORD(4),
-    WORD(2),
-    BYTE(1),
-    TYPVA(4);
+    INT(2);
 
     private int size;
 
@@ -30,5 +19,14 @@ public enum InstantDataTypes {
 
     public int getSize() {
         return size;
+    }
+
+    public static boolean isContains(String value) {
+        try {
+            InstantDataTypes.valueOf(value);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }

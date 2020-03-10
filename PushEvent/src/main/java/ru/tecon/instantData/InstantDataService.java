@@ -2,35 +2,72 @@ package ru.tecon.instantData;
 
 import ru.tecon.ProjectProperty;
 import ru.tecon.model.DataModel;
-import ru.tecon.server.Utils;
-import ru.tecon.webSocket.WebSocketClient;
+import ru.tecon.model.ValueModel;
+import ru.tecon.Utils;
 
 import javax.naming.NamingException;
 import java.io.BufferedInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * Класс для работы с мгновенными данными
+ */
 public class InstantDataService {
 
     private static final Logger LOG = Logger.getLogger(InstantDataService.class.getName());
+    private static final Map<String, String> methodsMap;
+
+    private static ScheduledExecutorService service;
+    private static ScheduledFuture future;
+
+    // Блок для инициализации map методов разбора реализованных простых типов
+    static {
+        methodsMap = new HashMap<>();
+        Method[] method = InstantDataService.class.getMethods();
+
+        for(Method md: method){
+            if (md.isAnnotationPresent(InstantTypes.class)) {
+                methodsMap.put(md.getAnnotation(InstantTypes.class).name().toString(), md.getName());
+            }
+        }
+    }
+
+    private InstantDataService() {
+
+    }
+
+    /**
+     * Метод закрывает службу проверки запроса на мгновенные данные
+     */
+    public static void stopService() {
+        if (Objects.nonNull(service)) {
+            future.cancel(true);
+            service.shutdown();
+        }
+    }
 
     /**
      * Метод запускает службу которая обрабатывает запросы на мгновенные данные
      */
     public static void startService() {
-        new WebSocketClient().connectToWebSocketServer();
         if (!ProjectProperty.isPushFromDataBase()) {
-            Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(() -> {
+            service = Executors.newSingleThreadScheduledExecutor();
+            future = service.scheduleWithFixedDelay(() -> {
                 try {
                     Utils.loadRMI().checkInstantRequest(ProjectProperty.getServerName());
                 } catch (NamingException e) {
@@ -40,171 +77,180 @@ public class InstantDataService {
         }
     }
 
+    /**
+     * Метод для выгрузки мгновенных данных от контроллера и отправки их в базу
+     * @param url ip адрес контроллера
+     */
     public static void uploadInstantData(String url) {
         try {
             List<DataModel> parameters = Utils.loadRMI().loadObjectInstantParameters(ProjectProperty.getServerName(), url);
 
-            System.out.println(parameters);
-        } catch (NamingException e) {
-            LOG.warning("error with load RMI: " + e.getMessage());
+            LOG.info("load instantData for url: " + url + " parameters count: " + parameters.size());
+
+            int size = 0;
+            List<InstantDataModel> dataModelList = new ArrayList<>();
+            for (DataModel model: parameters) {
+                String[] infoSplit = model.getParamName().split("::");
+                if ((infoSplit.length == 2) && (infoSplit[0].split(":").length == 2)) {
+                    String[] paramSplit = infoSplit[1].split(":");
+                    switch (paramSplit.length) {
+                        case 1:
+                            if (InstantDataTypes.isContains(paramSplit[0])) {
+                                dataModelList.add(new InstantDataModel(infoSplit[0].split(":")[0], paramSplit[0],
+                                    InstantDataTypes.valueOf(paramSplit[0]).getSize()));
+                                size += infoSplit[0].split(":")[0].getBytes().length + 1 + paramSplit[0].getBytes().length + 1 + 4;
+                            }
+                            break;
+                        case 4:
+                            if (InstantDataTypes.isContains(paramSplit[3])) {
+                                String split = infoSplit[0].split(":")[0];
+                                String paramName = split.substring(0, split.lastIndexOf("_"));
+                                dataModelList.add(new InstantDataModel(paramName, paramSplit[0], Integer.parseInt(paramSplit[1]),
+                                        Integer.parseInt(paramSplit[2]), paramSplit[3], split));
+                                size += paramName.getBytes().length + 1 + paramSplit[0].getBytes().length + 1 + 4;
+                            }
+                            break;
+                        case 5:
+                            // TODO реализовать вариант для String размер string указан в sysInfo
+                            break;
+                    }
+                }
+            }
+
+            if (dataModelList.isEmpty()) {
+                LOG.warning("Есть запрос на мгновенные данные, но не удалось распознать параметры");
+                return;
+            }
+
+            // Открываю подключение к прибору
+            byte[] response = new byte[16];
+
+            Socket socket = new Socket(InetAddress.getByName(url), ProjectProperty.getInstantPort());
+
+            BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
+            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+
+            // Реализую запрос на создание списка переменных
+            ByteBuffer head = ByteBuffer.allocate(16 + size).order(ByteOrder.LITTLE_ENDIAN)
+                    .putInt(6)
+                    .putInt(Integer.valueOf("0000001001000001", 2))
+                    .putInt(size)
+                    .putInt(0);
+
+            for (InstantDataModel instantDataModel: dataModelList) {
+                head.put(instantDataModel.getName().getBytes())
+                        .put((byte) 0)
+                        .put(instantDataModel.getType().getBytes())
+                        .put((byte) 0)
+                        .putInt(instantDataModel.getTypeSize());
+            }
+
+            out.write(head.array());
+            out.flush();
+
+            if ((in.read(response) != 16) &&
+                    (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
+                LOG.warning("Проблема чтения ответа на создание переменных: " + Arrays.toString(response));
+                return;
+            }
+
+            // Реализую запрос на чтение переменных по списку
+            byte[] request = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+                    .putInt(7)
+                    .putInt(1)
+                    .putInt(0)
+                    .putInt(0).array();
+
+            out.write(request);
+            out.flush();
+
+            if ((in.read(response) != 16) &&
+                    (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
+                LOG.warning("Проблема чтения ответа на чтение переменных по списку: " + Arrays.toString(response));
+                return;
+            }
+
+            byte[] data = new byte[ByteBuffer.wrap(Arrays.copyOfRange(response, 8, 12)).order(ByteOrder.LITTLE_ENDIAN).getInt()];
+
+            if (in.read(data) != data.length) {
+                LOG.warning("Проблема чтения мгновенных значений: " + Arrays.toString(data));
+            }
+
+            int index = 0;
+            for (InstantDataModel instantDataModel: dataModelList) {
+                if (data[index] == 0) {
+                    ByteBuffer buffer = ByteBuffer.wrap(Arrays.copyOfRange(data, index + 1, index + 1 + instantDataModel.getTypeSize()))
+                            .order(ByteOrder.BIG_ENDIAN);
+
+                    if (instantDataModel.isFunctionType()) {
+                        buffer = ByteBuffer.wrap(Arrays.copyOfRange(buffer.array(), instantDataModel.getOffset(),
+                                instantDataModel.getOffset() + InstantDataTypes.valueOf(instantDataModel.getSubType()).getSize()))
+                                .order(ByteOrder.BIG_ENDIAN);
+                        loadSimpleType(instantDataModel.getSubType(), instantDataModel.getFullName(), buffer, parameters);
+                    } else {
+                        loadSimpleType(instantDataModel.getType(), instantDataModel.getName(), buffer, parameters);
+                    }
+
+                    index += instantDataModel.getTypeSize();
+                }
+                index += 1;
+            }
+
+            parameters.removeIf(dataModel -> dataModel.getData().isEmpty());
+
+            LOG.info("upload instantData for url: " + url + " parameters with data count: " + parameters.size());
+
+            Utils.loadRMI().putInstantData(parameters);
+        } catch (NamingException | NoSuchMethodException | IllegalAccessException | InvocationTargetException | IOException e) {
+            LOG.log(Level.WARNING, "error with load instant data", e);
         }
     }
 
-    public static void main1(String[] args) {
-        System.out.println("TNV_H".getBytes().length + 1 + "REAL".getBytes().length + 1 + 4);
-        ByteBuffer bf = ByteBuffer.allocate(4).putInt("TNV_H".getBytes().length + 1 + "REAL".getBytes().length + 1 + 4);
-        System.out.println(Arrays.toString(bf.array()));
-        System.out.println();
+    /**
+     * Метод обертка разбирает простые типы
+     * @param type имя простого типа
+     * @param paramName имя параметра
+     * @param buffer буффер с данными
+     * @param parameters массив параметров куда кладутся значения
+     * @throws NoSuchMethodException ошибка
+     * @throws InvocationTargetException ошибка
+     * @throws IllegalAccessException ошибка
+     */
+    private static void loadSimpleType(String type, String paramName, ByteBuffer buffer, List<DataModel> parameters)
+            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+        if (methodsMap.get(type) != null) {
+            String value = String.valueOf(InstantDataService.class
+                    .getDeclaredMethod(methodsMap.get(type), ByteBuffer.class)
+                    .invoke(null, buffer));
 
-        System.out.println(Arrays.toString("REAL".getBytes()));
-
-        System.out.println((byte)128);
-
-
+            for (DataModel model: parameters) {
+                if (model.getParamName().startsWith(paramName + ":Текущие данные")) {
+                    model.addData(new ValueModel(value, LocalDateTime.now()));
+                    break;
+                }
+            }
+        } else {
+            LOG.warning("Отсутствует метод для разбора мгновенного значения " + type);
+        }
     }
 
-    public static void main(String[] args) throws IOException {
-//        TNV_H:REAL:Текущие данные
+    @InstantTypes(name = InstantDataTypes.REAL)
+    public static float readReal(ByteBuffer buffer) {
+        return buffer.getFloat();
+    }
 
+    @InstantTypes(name = InstantDataTypes.DINT)
+    public static int readDint(ByteBuffer buffer) {
+        return buffer.getInt();
+    }
 
+    @InstantTypes(name = InstantDataTypes.INT)
+    public static short readInt(ByteBuffer buffer) {
+        return buffer.getShort();
+    }
 
-        Socket socket = new Socket(InetAddress.getByName("192.168.1.26"), 30001);
-
-        BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
-        DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-
-        byte[] data = new byte[31];
-////        msg_type
-//        data[0] = 5;
-//        data[1] = 0;
-//        data[2] = 0;
-//        data[3] = 0;
-//
-////        msg_param
-//        data[4] = 1;
-//        data[5] = 0;
-//        data[6] = 0;
-//        data[7] = 0;
-//
-////        msg_len
-//        data[8] = 0;
-//        data[9] = 0;
-//        data[10] = 0;
-//        data[11] = 0;
-//
-////        msg_flags
-//        data[12] = 0;
-//        data[13] = 0;
-//
-////        __reserved
-//        data[14] = 0;
-//        data[15] = 0;
-
-        data[0] = 6;
-        data[1] = 0;
-        data[2] = 0;
-        data[3] = 0;
-
-        data[4] = 5;   //0000 0101  0000 0010  0000 0000  0000 0000
-        data[5] = 2;
-        data[6] = 0;
-        data[7] = 0;
-
-        ByteBuffer bf = ByteBuffer.allocate(4).putInt("TNV_H".getBytes().length + 1 + "REAL".getBytes().length + 1 + 4); // 15
-
-        data[8] = 15; //размер списка
-        data[9] = 0;
-        data[10] = 0;
-        data[11] = 0;
-
-        data[12] = 0;
-        data[13] = 0;
-
-        data[14] = 0;
-        data[15] = 0;
-
-
-
-        data[16] = 72; //TNV_H
-        data[17] = 95;
-        data[18] = 86;
-        data[19] = 78;
-        data[20] = 84;
-
-        data[21] = 0;
-
-        data[22] = 76; //REAL
-        data[23] = 65;
-        data[24] = 69;
-        data[25] = 82;
-
-        data[26] = 0;
-
-        data[27] = 4;
-        data[28] = 0;
-        data[29] = 0;
-        data[30] = 0;
-
-//        byte[] ddd = new byte[15];
-//        ddd.
-
-
-        out.write(data);
-        out.flush();
-
-        byte[] result = new byte[1];
-
-        List<Byte> resultList = new ArrayList<>();
-
-        while (in.read(result, 0, 1) != -1) {
-            resultList.add(result[0]);
-        }
-
-        System.out.println(resultList);
-
-        Socket socket1 = new Socket(InetAddress.getByName("192.168.1.26"), 30001);
-
-        BufferedInputStream in1 = new BufferedInputStream(socket1.getInputStream());
-        DataOutputStream out1 = new DataOutputStream(socket1.getOutputStream());
-
-        byte[] data1 = new byte[16];
-//        msg_type
-        data1[0] = 7;
-        data1[1] = 0;
-        data1[2] = 0;
-        data1[3] = 0;
-
-//        msg_param
-        data1[4] = 1;
-        data1[5] = 0;
-        data1[6] = 0;
-        data1[7] = 0;
-
-//        msg_len
-        data1[8] = 0;
-        data1[9] = 0;
-        data1[10] = 0;
-        data1[11] = 0;
-
-//        msg_flags
-        data1[12] = 0;
-        data1[13] = 0;
-
-//        __reserved
-        data1[14] = 0;
-        data1[15] = 0;
-
-        out1.write(data1);
-        out1.flush();
-
-        byte[] result1 = new byte[1];
-
-        List<Byte> resultList1 = new ArrayList<>();
-
-        while (in1.read(result1, 0, 1) != -1) {
-            resultList1.add(result1[0]);
-        }
-
-        System.out.println(resultList1);
+    @InstantTypes(name = InstantDataTypes.BOOL)
+    public static byte readBool(ByteBuffer buffer) {
+        return buffer.get();
     }
 }
