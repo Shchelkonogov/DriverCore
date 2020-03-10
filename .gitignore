@@ -3,3 +3,4 @@
 PushEvent/resources/log/*
 PushEvent/resources/config
 PushEvent/resources/instantConfig
+log.*
