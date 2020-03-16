@@ -5,9 +5,9 @@ import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.instantData.InstantDataTypes;
 
 import javax.naming.NamingException;
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
@@ -22,8 +22,9 @@ public class ControllerConfig {
 
     private static final Logger LOG = Logger.getLogger(ControllerConfig.class.getName());
 
-    private static Map<String, Map<String, List<String>>> config = new HashMap<>();
+    private static Map<String, List<String>> config = new HashMap<>();
     private static Set<String> configList = new HashSet<>();
+    private static List<String> instantConfigList = new LinkedList<>();
 
     private static ScheduledExecutorService service;
     private static ScheduledFuture future;
@@ -45,21 +46,20 @@ public class ControllerConfig {
         String line;
         String key1 = null;
         String key2 = null;
+        String key3 = null;
         while ((line = reader.readLine()) != null) {
             if (line.trim().startsWith("^")) {
                 key1 = line.trim().substring(1);
-                if (!config.containsKey(key1)) {
-                    config.put(key1, new HashMap<>());
-                }
             }
             if (line.trim().startsWith("@") && (line.trim().split(",").length == 2)) {
                 key2 = line.trim().split(",")[0].substring(1);
-                if ((key1 != null) && !config.get(key1).containsKey(key2)) {
-                    config.get(key1).put(key2, new ArrayList<>());
+                key3 = line.trim().split(",")[1];
+                if ((key1 != null) && !config.containsKey(key1 + ":" + key2 + ":" + key3)) {
+                    config.put(key1 + ":" + key2 + ":" + key3, new ArrayList<>());
                 }
             }
             if (line.trim().startsWith("#")) {
-                if ((key1 != null) && (key2 != null)) {
+                if ((key1 != null) && (key2 != null) && (key3 != null)) {
                     if (line.trim().split(",").length == 7) {
                         String addName = "";
                         switch (line.trim().split(",")[3]) {
@@ -73,19 +73,22 @@ public class ControllerConfig {
                                 addName = ":iHourToSec";
                                 break;
                         }
-                        config.get(key1).get(key2).add(line.trim().split(",")[6] + ":" +
-                                line.trim().split(",")[0].substring(1) + addName + "::" +
-                                line.trim().split(",")[3]);
+                        if (config.get(key1 + ":" + key2 + ":" + key3).size() < Integer.parseInt(key3)) {
+                            config.get(key1 + ":" + key2 + ":" + key3).add(line.trim().split(",")[6] + ":" +
+                                    line.trim().split(",")[0].substring(1) + addName + "::" +
+                                    line.trim().split(",")[3]);
+                        }
                     }
                 }
             }
         }
 
-        for (String k1: config.keySet()) {
-            for (String k2: config.get(k1).keySet()) {
-                configList.addAll(config.get(k1).get(k2));
-            }
+        for (String k: config.keySet()) {
+            configList.addAll(config.get(k));
         }
+
+        instantConfigList = new LinkedList<>(Files.readAllLines(Paths.get(ProjectProperty.getInstantConfigFile())));
+        instantConfigList.removeIf(s -> s.trim().isEmpty());
 
         return !config.isEmpty();
     }
@@ -139,8 +142,8 @@ public class ControllerConfig {
         }
     }
 
-    public static List<String> getConfigNames(String bufferNumber, String eventCode) {
-        return config.containsKey(bufferNumber) ? config.get(bufferNumber).get(eventCode) : null;
+    public static List<String> getConfigNames(int bufferNumber, int eventCode, int size) {
+        return config.getOrDefault(bufferNumber + ":" + eventCode + ":" + size, null);
     }
 
     /**
@@ -162,24 +165,23 @@ public class ControllerConfig {
             session.connect();
 
             Channel channel = session.openChannel("exec");
-            ((ChannelExec)channel).setCommand("cat /user/IDS*");
+            ((ChannelExec)channel).setCommand("cat /user/IDS00201");
             channel.connect();
 
-            BufferedInputStream in = new BufferedInputStream(channel.getInputStream());
-
-            int readByte;
             StringBuilder sb = new StringBuilder();
-
-            while((readByte = in.read()) != -1) {
-                sb.append((char)readByte);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(channel.getInputStream()))) {
+                reader.lines().forEach(s -> {
+                    if (!s.isEmpty()) {
+                        sb.append(s).append("\n");
+                    }
+                });
+            } catch (IOException e) {
+                LOG.warning("error ssh file read: " + e.getMessage());
             }
 
             String types = sb.substring(sb.indexOf("[TYPE]") + "[TYPE]".length(), sb.indexOf("[DEVTYP]"));
 
             String variables = sb.substring(sb.indexOf("[VARIABLE]") + "[VARIABLE]".length(), sb.indexOf("[END]"));
-
-            List<String> globalConfig = new LinkedList<>(Files.readAllLines(Paths.get(ProjectProperty.getInstantConfigFile())));
-            globalConfig.removeIf(s -> s.trim().isEmpty());
 
             List<String> typesList = new LinkedList<>(Arrays.asList(types.split("\n")));
             typesList.removeIf(s -> !(s.startsWith("T") || s.startsWith("F")));
@@ -191,7 +193,7 @@ public class ControllerConfig {
                     .map(Enum::name)
                     .collect(Collectors.toList());
 
-            outer: for (String globalConfigItem: globalConfig) {
+            outer: for (String globalConfigItem: instantConfigList) {
                 for (Iterator<String> it = variablesList.iterator(); it.hasNext();) {
                     String variableItem = it.next();
                     String variableItemName = variableItem.substring(variableItem.indexOf("=") + 1).split(",")[0];
@@ -286,8 +288,6 @@ public class ControllerConfig {
             session.disconnect();
         } catch (JSchException e) {
             LOG.warning("error ssh connect: " + e.getMessage());
-        } catch (IOException e) {
-            LOG.warning("error ssh file read: " + e.getMessage());
         }
 
         return result;
