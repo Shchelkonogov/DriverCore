@@ -39,12 +39,12 @@ public class EchoThread extends Thread {
     }
 
     public void run() {
-        BufferedInputStream in;
+        DataInputStream in;
         DataOutputStream out;
 
         try {
-            in = new BufferedInputStream(socket.getInputStream());
-            out = new DataOutputStream(socket.getOutputStream());
+            in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+            out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
         } catch (IOException e) {
             LOG.warning("run Error create data streams Message: " + e.getMessage()
                     + " Thread: " + this.getId() + " ObjectName: " + objectName);
@@ -62,19 +62,14 @@ public class EchoThread extends Thread {
                     // Читаем сообщение
                     data = new byte[size];
 
-                    int readBytes = 0;
                     if (size == 0) {
                         socket.close();
                         LOG.warning("run Error read message Socket close! Thread: " + this.getId() +
                                 " ObjectName: " + objectName);
                         return;
                     }
-                    //Из-за передачи по TCP может не в первом покете прийти данные,
-                    // так что приходится читать в цикле, пока все не прочитется
-                    while (readBytes != size) {
-                        readBytes += in.read(data, readBytes, size - readBytes);
-                    }
-                    LOG.info("Thread: " + this.getId() + " Read bytes: " + readBytes + " Message body: " + Arrays.toString(data));
+                    in.readFully(data);
+                    LOG.info("Thread: " + this.getId() + " Message body: " + Arrays.toString(data));
 
                     int packageType = data[0] & 0xff;
 
