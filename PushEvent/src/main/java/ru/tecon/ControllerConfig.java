@@ -137,6 +137,7 @@ public class ControllerConfig {
             urlConfig.put(url, getInstantConfigFromURL(url));
 
             Utils.loadRMI().putConfig(configList, urlConfig, ProjectProperty.getServerName());
+            LOG.info("configuration is uploaded");
         } catch (NamingException e) {
             LOG.info("error load RMI: " + e.getMessage());
         }
@@ -152,6 +153,8 @@ public class ControllerConfig {
      * @return список параметров конфигурации
      */
     private static Set<String> getInstantConfigFromURL(String url) {
+        LOG.info("request load instant config from: " + url);
+
         Set<String> result = new HashSet<>();
 
         try {
@@ -178,6 +181,8 @@ public class ControllerConfig {
             } catch (IOException e) {
                 LOG.warning("error ssh file read: " + e.getMessage());
             }
+
+            LOG.info("symbol table from url: " + url + " is loaded");
 
             String types = sb.substring(sb.indexOf("[TYPE]") + "[TYPE]".length(), sb.indexOf("[DEVTYP]"));
 
