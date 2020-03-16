@@ -458,7 +458,21 @@ public class EchoThread extends Thread {
                             addIndex += count;
                             break;
                         }
-                        case 255:
+                        case 255: {
+                            int boolCount = count;
+                            count = (int) Math.ceil(count / 8d);
+                            Integer[] additionalData = new Integer[count * 8];
+                            for (int k = 0; k < count; k++) {
+                                for (int m = 0; m < 8; m++) {
+                                    additionalData[8 * k + m] = (data[additionalDataStartIndex + addIndex + k] & ((int) Math.pow(2, m))) >> m;
+                                }
+                            }
+                            result.add("additional data: " + Arrays.toString(Arrays.copyOfRange(additionalData, 0, boolCount)));
+                            parseData.addAll(Arrays.asList(Arrays.copyOfRange(additionalData, 0, boolCount)));
+                            add += count;
+                            addIndex += count;
+                            break;
+                        }
                         case 64:
                         default: {
                             Byte[] additionalData = new Byte[count];
@@ -474,7 +488,7 @@ public class EchoThread extends Thread {
                 }
                 result.add("");
 
-                List<String> parameters = ControllerConfig.getConfigNames(String.valueOf(bufferNumber), String.valueOf(eventCode));
+                List<String> parameters = ControllerConfig.getConfigNames(bufferNumber, eventCode, parseData.size());
 
                 if ((parameters != null) && (parameters.size() == parseData.size())) {
                     Map<String, Object> mapData = new HashMap<>();
