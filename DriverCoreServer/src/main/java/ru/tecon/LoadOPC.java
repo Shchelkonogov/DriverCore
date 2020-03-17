@@ -93,7 +93,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * третий параметр - id запроса
      */
     private static final String SQL_UPDATE_CHECK = "update arm_commands " +
-            "set is_success_execution = 1, result_description = ?, display_result_description = ?, end_time = sysdate where id = ?";
+            "set is_success_execution = ?, result_description = ?, display_result_description = ?, end_time = sysdate where id = ?";
 
 
     /**
@@ -202,6 +202,17 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                 "where aspid_object_id = ? and aspid_param_id = ? and aspid_agr_id is null)), " +
             "null)";
 
+    /**
+     * SQL для определения id комманд которые не закрыты по id объекта
+     * первый параметр - имя сервера_url
+     */
+    private static final String SQL_GET_COMMAND_IDS = "select id from arm_commands " +
+            "where (extractValue(XMLType(args), '/ObjectId')) = " +
+            "      (select aspid_object_id from tsa_linked_object " +
+            "           where opc_object_id in (select id from tsa_opc_object " +
+            "               where display_name like ?)) " +
+            "and kind = 'AsyncRefresh' and is_success_execution is null";
+
     @Resource(name = "jdbc/DataSource")
     private DataSource ds;
 
@@ -307,9 +318,10 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                 int count = 0;
                 count = getCount(stmUpdateConfig, resObjectId, count, config);
 
-                stmUpdateCheck.setString(1, "<" + resObjectId.getString(2) + ">" + count + "</" + resObjectId.getString(2) + ">");
-                stmUpdateCheck.setString(2, "Получено " + count + " элементов по объекту '" + resObjectId.getString(2) + "'.");
-                stmUpdateCheck.setString(3, resObjectId.getString(3));
+                stmUpdateCheck.setInt(1, 1);
+                stmUpdateCheck.setString(2, "<" + resObjectId.getString(2) + ">" + count + "</" + resObjectId.getString(2) + ">");
+                stmUpdateCheck.setString(3, "Получено " + count + " элементов по объекту '" + resObjectId.getString(2) + "'.");
+                stmUpdateCheck.setString(4, resObjectId.getString(3));
 
                 stmUpdateCheck.executeUpdate();
             }
@@ -340,9 +352,10 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                     }
                 }
 
-                stmUpdateCheck.setString(1, "<" + resObjectId.getString(2) + ">" + count + "</" + resObjectId.getString(2) + ">");
-                stmUpdateCheck.setString(2, "Получено " + count + " элементов по объекту '" + resObjectId.getString(2) + "'.");
-                stmUpdateCheck.setString(3, resObjectId.getString(3));
+                stmUpdateCheck.setInt(1, 1);
+                stmUpdateCheck.setString(2, "<" + resObjectId.getString(2) + ">" + count + "</" + resObjectId.getString(2) + ">");
+                stmUpdateCheck.setString(3, "Получено " + count + " элементов по объекту '" + resObjectId.getString(2) + "'.");
+                stmUpdateCheck.setString(4, resObjectId.getString(3));
 
                 stmUpdateCheck.executeUpdate();
             }
@@ -534,9 +547,10 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
                 ResultSet res = stmGetId.executeQuery();
                 while (res.next()) {
-                    stmUpdate.setString(1, "<" + id + ">" + count + "</" + id + ">");
-                    stmUpdate.setString(2, "Получено " + count + " элементов по объекту '" + id + "'.");
-                    stmUpdate.setString(3, res.getString(1));
+                    stmUpdate.setInt(1, 1);
+                    stmUpdate.setString(2, "<" + id + ">" + count + "</" + id + ">");
+                    stmUpdate.setString(3, "Получено " + count + " элементов по объекту '" + id + "'.");
+                    stmUpdate.setString(4, res.getString(1));
 
                     stmUpdate.executeUpdate();
 
@@ -629,6 +643,28 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             LOG.warning("error while load instant data parameters: " + e.getMessage());
         }
         return result;
+    }
+
+    @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    public void errorExecuteAsyncRefreshCommand(String path, String message) {
+        try (Connection connection = ds.getConnection();
+             PreparedStatement stmGetIds = connection.prepareStatement(SQL_GET_COMMAND_IDS);
+             PreparedStatement stmUpdate = connection.prepareStatement(SQL_UPDATE_CHECK)) {
+            stmGetIds.setString(1, path + "%");
+            ResultSet resObjectId = stmGetIds.executeQuery();
+            while (resObjectId.next()) {
+                stmUpdate.setInt(1, 0);
+                stmUpdate.setString(2, "<Error>" + message + "</Error>");
+                stmUpdate.setString(3, message);
+                stmUpdate.setString(4, resObjectId.getString(1));
+
+                stmUpdate.addBatch();
+            }
+            stmUpdate.executeBatch();
+        } catch (SQLException e) {
+            LOG.log(Level.WARNING, "error when put failure message", e);
+        }
     }
 
     /**

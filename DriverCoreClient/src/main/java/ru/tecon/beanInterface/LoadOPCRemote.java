@@ -114,4 +114,11 @@ public interface LoadOPCRemote {
      * @return список параметров
      */
     ArrayList<DataModel> loadObjectInstantParameters(String serverName, String url);
+
+    /**
+     * Метод выставляет статус не выполнения команды на получение мгновенных данных
+     * @param path имя сервера_url
+     * @param message сообщение
+     */
+    void errorExecuteAsyncRefreshCommand(String path, String message);
 }
