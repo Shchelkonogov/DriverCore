@@ -6,11 +6,10 @@ import ru.tecon.model.ValueModel;
 import ru.tecon.Utils;
 
 import javax.naming.NamingException;
-import java.io.BufferedInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -82,6 +81,7 @@ public class InstantDataService {
      * @param url ip адрес контроллера
      */
     public static void uploadInstantData(String url) {
+        String errorPath = ProjectProperty.getServerName() + "_" + url;
         try {
             List<DataModel> parameters = Utils.loadRMI().loadObjectInstantParameters(ProjectProperty.getServerName(), url);
 
@@ -89,7 +89,7 @@ public class InstantDataService {
 
             int size = 0;
             List<InstantDataModel> dataModelList = new ArrayList<>();
-            for (DataModel model: parameters) {
+            for (DataModel model : parameters) {
                 String[] infoSplit = model.getParamName().split("::");
                 if ((infoSplit.length == 2) && (infoSplit[0].split(":").length == 2)) {
                     String[] paramSplit = infoSplit[1].split(":");
@@ -97,7 +97,7 @@ public class InstantDataService {
                         case 1:
                             if (InstantDataTypes.isContains(paramSplit[0])) {
                                 dataModelList.add(new InstantDataModel(infoSplit[0].split(":")[0], paramSplit[0],
-                                    InstantDataTypes.valueOf(paramSplit[0]).getSize()));
+                                        InstantDataTypes.valueOf(paramSplit[0]).getSize()));
                                 size += infoSplit[0].split(":")[0].getBytes().length + 1 + paramSplit[0].getBytes().length + 1 + 4;
                             }
                             break;
@@ -119,6 +119,8 @@ public class InstantDataService {
 
             if (dataModelList.isEmpty()) {
                 LOG.warning("Есть запрос на мгновенные данные, но не удалось распознать параметры");
+                Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath,
+                        "По объекту '" + errorPath + "' не подписан ни один параметр");
                 return;
             }
 
@@ -127,8 +129,8 @@ public class InstantDataService {
 
             Socket socket = new Socket(InetAddress.getByName(url), ProjectProperty.getInstantPort());
 
-            BufferedInputStream in = new BufferedInputStream(socket.getInputStream());
-            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+            DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
 
             // Реализую запрос на создание списка переменных
             ByteBuffer head = ByteBuffer.allocate(16 + size).order(ByteOrder.LITTLE_ENDIAN)
@@ -137,7 +139,7 @@ public class InstantDataService {
                     .putInt(size)
                     .putInt(0);
 
-            for (InstantDataModel instantDataModel: dataModelList) {
+            for (InstantDataModel instantDataModel : dataModelList) {
                 head.put(instantDataModel.getName().getBytes())
                         .put((byte) 0)
                         .put(instantDataModel.getType().getBytes())
@@ -151,6 +153,7 @@ public class InstantDataService {
             if ((in.read(response) != 16) &&
                     (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
                 LOG.warning("Проблема чтения ответа на создание переменных: " + Arrays.toString(response));
+                Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath, "Проблема чтения ответа на создание переменных");
                 return;
             }
 
@@ -167,17 +170,16 @@ public class InstantDataService {
             if ((in.read(response) != 16) &&
                     (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
                 LOG.warning("Проблема чтения ответа на чтение переменных по списку: " + Arrays.toString(response));
+                Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath, "Проблема чтения ответа на чтение переменных по списку");
                 return;
             }
 
             byte[] data = new byte[ByteBuffer.wrap(Arrays.copyOfRange(response, 8, 12)).order(ByteOrder.LITTLE_ENDIAN).getInt()];
 
-            if (in.read(data) != data.length) {
-                LOG.warning("Проблема чтения мгновенных значений: " + Arrays.toString(data));
-            }
+            in.readFully(data);
 
             int index = 0;
-            for (InstantDataModel instantDataModel: dataModelList) {
+            for (InstantDataModel instantDataModel : dataModelList) {
                 if (data[index] == 0) {
                     ByteBuffer buffer = ByteBuffer.wrap(Arrays.copyOfRange(data, index + 1, index + 1 + instantDataModel.getTypeSize()))
                             .order(ByteOrder.BIG_ENDIAN);
@@ -201,6 +203,13 @@ public class InstantDataService {
             LOG.info("upload instantData for url: " + url + " parameters with data count: " + parameters.size());
 
             Utils.loadRMI().putInstantData(parameters);
+        } catch (ConnectException e) {
+            LOG.log(Level.WARNING, "socket connect exception", e);
+            try {
+                Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath, "Невозможно подключиться к прибору");
+            } catch (NamingException ex) {
+                LOG.log(Level.WARNING, "load RMI exception", ex);
+            }
         } catch (NamingException | NoSuchMethodException | IllegalAccessException | InvocationTargetException | IOException e) {
             LOG.log(Level.WARNING, "error with load instant data", e);
         }
