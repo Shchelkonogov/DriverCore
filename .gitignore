@@ -1,6 +1,6 @@
 *.iml
 .idea/*
-PushEvent/resources/log/*
-PushEvent/resources/config
-PushEvent/resources/instantConfig
+resources/log/*
+resources/config
+resources/instantConfig
 log.*
