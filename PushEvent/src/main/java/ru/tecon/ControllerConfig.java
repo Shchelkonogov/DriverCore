@@ -1,7 +1,6 @@
 package ru.tecon;
 
 import com.jcraft.jsch.*;
-import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.instantData.InstantDataTypes;
 
 import javax.naming.NamingException;
@@ -9,9 +8,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
@@ -41,7 +40,7 @@ public class ControllerConfig {
     public static boolean parsControllerConfig() throws IOException {
         LOG.info("read config file " + ProjectProperty.getConfigFile());
 
-        BufferedReader reader = Files.newBufferedReader(Paths.get(ProjectProperty.getConfigFile()));
+        BufferedReader reader = Files.newBufferedReader(ProjectProperty.getConfigFile());
 
         String line;
         String key1 = null;
@@ -87,7 +86,7 @@ public class ControllerConfig {
             configList.addAll(config.get(k));
         }
 
-        instantConfigList = new LinkedList<>(Files.readAllLines(Paths.get(ProjectProperty.getInstantConfigFile())));
+        instantConfigList = new LinkedList<>(Files.readAllLines(ProjectProperty.getInstantConfigFile()));
         instantConfigList.removeIf(s -> s.trim().isEmpty());
 
         return !config.isEmpty();
@@ -111,18 +110,9 @@ public class ControllerConfig {
             service = Executors.newSingleThreadScheduledExecutor();
             future = service.scheduleWithFixedDelay(() -> {
                 try {
-                    LoadOPCRemote opc = Utils.loadRMI();
-
-                    List<String> urlList = opc.getURLToLoadConfig(ProjectProperty.getServerName());
-
-                    if (!urlList.isEmpty()) {
-                        Map<String, Set<String>> urlConfig = new HashMap<>();
-                        urlList.forEach(s -> urlConfig.put(s, getInstantConfigFromURL(s)));
-
-                        opc.putConfig(configList, urlConfig, ProjectProperty.getServerName());
-                    }
+                    Utils.loadRMI().checkConfigRequest(ProjectProperty.getServerName());
                 } catch (NamingException e) {
-                    LOG.warning("error with upload config service. Message: " + e.getMessage());
+                    LOG.log(Level.WARNING, "error with config service", e);
                 }
             }, 5, 30, TimeUnit.SECONDS);
         }
@@ -133,13 +123,13 @@ public class ControllerConfig {
      */
     public static void uploadConfig(String url) {
         try {
-            Map<String, Set<String>> urlConfig = new HashMap<>();
-            urlConfig.put(url, getInstantConfigFromURL(url));
+            Set<String> config = getInstantConfigFromURL(url);
+            config.addAll(configList);
 
-            Utils.loadRMI().putConfig(configList, urlConfig, ProjectProperty.getServerName());
-            LOG.info("configuration is uploaded");
+            Utils.loadRMI().putConfig(config, url, ProjectProperty.getServerName());
+            LOG.info("configuration for url: " + url + " is uploaded");
         } catch (NamingException e) {
-            LOG.info("error load RMI: " + e.getMessage());
+            LOG.log(Level.WARNING, "error load RMI", e);
         }
     }
 
