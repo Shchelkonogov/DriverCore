@@ -19,6 +19,8 @@ import java.util.*;
 import java.util.concurrent.Future;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Stateless bean реализующий интерфейсы
@@ -32,6 +34,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     private static final Logger LOG = Logger.getLogger(LoadOPC.class.getName());
 
     private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH");
+    private static final Pattern PATTERN_IPV4 = Pattern.compile("(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])", Pattern.CASE_INSENSITIVE);
 
     /**
      * insert который загружает объект в базу <br>
@@ -52,33 +55,47 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     /**
      * select для определения требует ли база <br>
      * загрузки в нее конфигурации сервера <br>
-     * параметр - {@code %<Server>'имя сервера'</Server>}
+     * параметр - имя сервера
      */
     private static final String SQL_CHECK_REQUEST_LOAD_CONFIG = "select 1 from dual " +
             "where exists(select * from arm_commands " +
-            "where kind = 'ForceBrowse' and args like ? and is_success_execution is null)";
+            "where kind = 'ForceBrowse' and extractValue(XMLType('<Group>' || args || '</Group>'), '/Group/Server') = ? " +
+            "and is_success_execution is null)";
 
 
 
     /**
      * select для определения списка URL <br>
      * по которым база запросила конфигурацию сервера <br>
-     * параметр - {@code %<Server>'имя сервера'</Server>}
+     * параметр - имя сервера
      */
-    private static final String SQL_GET_REQUEST_LOAD_CONFIG = "select regexp_substr(args, '<ItemName>.*</ItemName>') " +
-            "from arm_commands where kind = 'ForceBrowse' and args like ? and is_success_execution is null";
-
+    private static final String SQL_GET_REQUEST_LOAD_CONFIG = "select extractValue(XMLType('<Group>' || args || '</Group>'), '/Group/ItemName') " +
+            "from arm_commands where kind = 'ForceBrowse' " +
+            "and extractValue(XMLType('<Group>' || args || '</Group>'), '/Group/Server') = ? and is_success_execution is null";
 
 
     /**
      * select выгружает id запросов на конфигурацию сервера <br>
      * id и имя объектов сервера <br>
-     * параметро - {@code %<Server>'имя сервера'</Server>}
+     * параметр - имя сервера
      */
     private static final String SQL_GET_OPC_OBJECT_ID = "select b.id, b.display_name, a.id from arm_commands a " +
             "inner join tsa_opc_object b " +
             "on a.args = b.opc_path and a.kind = 'ForceBrowse' " +
-            "and a.is_success_execution is null and a.args like ?";
+            "and a.is_success_execution is null " +
+            "and extractValue(XMLType('<Group>' || a.args || '</Group>'), '/Group/Server') = ?";
+    /**
+     * select выгружает id запросов на конфигурацию сервера <br>
+     * id и имя объектов сервера <br>
+     * первый параметр - имя сервера
+     * второй параметр - ip адрес запроса мгновенных данных
+     */
+    private static final String SQL_GET_OPC_OBJECT_ID_2 = "select b.id, b.display_name, a.id from arm_commands a " +
+            "inner join tsa_opc_object b " +
+            "on a.args = b.opc_path and a.kind = 'ForceBrowse' " +
+            "and a.is_success_execution is null " +
+            "and extractValue(XMLType('<Group>' || a.args || '</Group>'), '/Group/Server') = ? " +
+            "and extractValue(XMLType('<Group>' || a.args || '</Group>'), '/Group/ItemName') = ?";
     /**
      * insert который загружает в базу конфигурацию сервера <br>
      * первый параметр - имя параметра <br>
@@ -88,9 +105,10 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     private static final String SQL_INSERT_CONFIG = "insert into tsa_opc_element values ((select get_guid_base64 from dual), ?, ?, ?, 1, null)";
     /**
      * update который выставляет статус выполнения insert по добавлению конфигурации <br>
-     * первый параметр - {@code <'имя объекта'>'количество вставленных параметров'<'имя объекта'>} <br>
-     * второй параметр - комментарии в произвольном виде <br>
-     * третий параметр - id запроса
+     * первый параметр - статус выполения 1 - выполенно 0 - ошибка выполнения
+     * второй параметр - {@code <'имя объекта'>'количество вставленных параметров'<'имя объекта'>} <br>
+     * третий параметр - комментарии в произвольном виде <br>
+     * четвертый параметр - id запроса
      */
     private static final String SQL_UPDATE_CHECK = "update arm_commands " +
             "set is_success_execution = ?, result_description = ?, display_result_description = ?, end_time = sysdate where id = ?";
@@ -197,10 +215,12 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      */
     private static final String INSERT_ASYNC_REFRESH_DATA = "insert into arm_async_refresh_data " +
             "values (?, ?, sysdate - 3/24, ?, ?, ?, sysdate, " +
-            "(select extractValue(XMLType(opc_path), '/ItemName') " +
+            "(select extractValue(XMLType('<Group>' || opc_path || '</Group>'), '/Group/ItemName') " +
                 "from tsa_opc_element where id in (select opc_element_id from tsa_linked_element " +
                 "where aspid_object_id = ? and aspid_param_id = ? and aspid_agr_id is null)), " +
             "null)";
+
+
 
     /**
      * SQL для определения id комманд которые не закрыты по id объекта
@@ -219,6 +239,9 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     @Resource(name = "jdbc/DataSourceUpload")
     private DataSource dsUpload;
 
+    @Resource
+    private EJBContext context;
+
     @Override
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public void insertOPCObjects(List<String> objects, String serverName) {
@@ -230,14 +253,14 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                 stmInsertObject.setString(2, objectPath);
                 try {
                     stmInsertObject.executeUpdate();
-                    LOG.info("insertOPCObjects Успешная вставка объекта " + objectPath);
+                    LOG.info("Успешная вставка объекта " + objectPath);
                 } catch(SQLException e) {
-                    LOG.warning("insertOPCObjects Данная запись уже существует " + objectPath);
+                    // TODO Сделать проверку на существование записи и ничего не выводить если запись существует
+                    LOG.warning("Данная запись уже существует " + objectPath);
                 }
             }
         } catch (SQLException e) {
-            LOG.warning("insertOPCObjects ошибка обращения к базе " + e.getMessage() +
-                    " objects: " + objects + " serverName: " + serverName);
+            LOG.log(Level.WARNING, "Ошибка обращения к базе; server name: " + serverName + "; objects: " + objects, e);
         }
     }
 
@@ -259,15 +282,15 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
                 try {
                     stmInsertObject.executeUpdate();
-                    LOG.info("checkObject Успешная вставка объекта: " + objectPath);
+                    LOG.info("Успешная вставка объекта: " + objectPath);
                 } catch(SQLException e) {
-                    LOG.warning("checkObject Данная запись уже существует: " + objectPath);
+                    // TODO Сделать проверку на существование записи и ничего не выводить если запись существует
+                    LOG.warning("Данная запись уже существует: " + objectPath);
                 }
                 return false;
             }
         } catch (SQLException e) {
-            LOG.warning("checkObject Ошибка обращения к базе " + e.getMessage() +
-                    " objectName: " + objectName + " serverName: " + serverName);
+            LOG.log(Level.WARNING, "Ошибка обращения к базе; server name: " + serverName + "; object name: " + objectName, e);
         }
         return false;
     }
@@ -276,31 +299,33 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     public boolean isLoadConfig(String serverName) {
         try (Connection connect = ds.getConnection();
              PreparedStatement stm = connect.prepareStatement(SQL_CHECK_REQUEST_LOAD_CONFIG)) {
-            stm.setString(1, "%<Server>" + serverName + "</Server>");
+            stm.setString(1, serverName);
 
             ResultSet res = stm.executeQuery();
             return res.next();
         } catch (SQLException e) {
-            LOG.warning("isLoadConfig Ошибка обращения к базе " + e.getMessage() + " serverName: " + serverName);
-            return false;
+            LOG.log(Level.WARNING, "Ошибка обращения к базе; server name: " + serverName, e);
         }
+        return false;
     }
 
     @Override
-    public ArrayList<String> getURLToLoadConfig(String serverName) {
-        ArrayList<String> result = new ArrayList<>();
+    public void checkConfigRequest(String serverName) {
         try (Connection connect = ds.getConnection();
              PreparedStatement stm = connect.prepareStatement(SQL_GET_REQUEST_LOAD_CONFIG)) {
-            stm.setString(1, "%<Server>" + serverName + "</Server>");
+            stm.setString(1, serverName);
 
             ResultSet res = stm.executeQuery();
             while (res.next()) {
-                result.add(res.getString(1).split("_")[1]);
+                Matcher m = PATTERN_IPV4.matcher(res.getString(1));
+                if (m.find()) {
+                    WebSocketServer.sendTo(serverName, "loadConfig " + m.group());
+                } else {
+                    LOG.warning("Есть запрос на конфигурацию но он не содержит ip address");
+                }
             }
-            return result;
         } catch (SQLException e) {
-            LOG.warning("Ошибка обращения к базе " + e.getMessage() + " serverName: " + serverName);
-            return result;
+            LOG.log(Level.WARNING, "Ошибка обращения к базе; server name: " + serverName, e);
         }
     }
 
@@ -311,81 +336,69 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
              PreparedStatement stmObjectId = connect.prepareStatement(SQL_GET_OPC_OBJECT_ID);
              PreparedStatement stmUpdateConfig = connect.prepareStatement(SQL_INSERT_CONFIG);
              PreparedStatement stmUpdateCheck = connect.prepareStatement(SQL_UPDATE_CHECK)) {
-            stmObjectId.setString(1, "%<Server>" + serverName + "</Server>");
+            stmObjectId.setString(1, serverName);
 
-            ResultSet resObjectId = stmObjectId.executeQuery();
-            while (resObjectId.next()) {
-                int count = 0;
-                count = getCount(stmUpdateConfig, resObjectId, count, config);
-
-                stmUpdateCheck.setInt(1, 1);
-                stmUpdateCheck.setString(2, "<" + resObjectId.getString(2) + ">" + count + "</" + resObjectId.getString(2) + ">");
-                stmUpdateCheck.setString(3, "Получено " + count + " элементов по объекту '" + resObjectId.getString(2) + "'.");
-                stmUpdateCheck.setString(4, resObjectId.getString(3));
-
-                stmUpdateCheck.executeUpdate();
-            }
+            putConfig(stmObjectId, stmUpdateConfig, stmUpdateCheck, config);
         } catch (SQLException e) {
-            LOG.warning("putConfig Ошибка обращения к базе " + e.getMessage() +
-                    " config: " + config + " serverName: " + serverName);
+            LOG.log(Level.WARNING, "Ошибка обращения к базе; server name: " + serverName + "; config: " + config, e);
+            context.setRollbackOnly();
         }
     }
 
     @Override
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
-    public void putConfig(Set<String> config, Map<String, Set<String>> instantConfig, String serverName) {
+    public void putConfig(Set<String> config, String ipAddress, String serverName) {
         try (Connection connect = ds.getConnection();
-             PreparedStatement stmObjectId = connect.prepareStatement(SQL_GET_OPC_OBJECT_ID);
+             PreparedStatement stmObjectId = connect.prepareStatement(SQL_GET_OPC_OBJECT_ID_2);
              PreparedStatement stmUpdateConfig = connect.prepareStatement(SQL_INSERT_CONFIG);
              PreparedStatement stmUpdateCheck = connect.prepareStatement(SQL_UPDATE_CHECK)) {
-            stmObjectId.setString(1, "%<Server>" + serverName + "</Server>");
+            stmObjectId.setString(1, serverName);
+            stmObjectId.setString(2, ipAddress);
 
-            ResultSet resObjectId = stmObjectId.executeQuery();
-            while (resObjectId.next()) {
-                int count = 0;
-                count = getCount(stmUpdateConfig, resObjectId, count, config);
-
-                for (String key: instantConfig.keySet()) {
-                    if (resObjectId.getString(2).contains(key)) {
-                        count = getCount(stmUpdateConfig, resObjectId, count, instantConfig.get(key));
-                        break;
-                    }
-                }
-
-                stmUpdateCheck.setInt(1, 1);
-                stmUpdateCheck.setString(2, "<" + resObjectId.getString(2) + ">" + count + "</" + resObjectId.getString(2) + ">");
-                stmUpdateCheck.setString(3, "Получено " + count + " элементов по объекту '" + resObjectId.getString(2) + "'.");
-                stmUpdateCheck.setString(4, resObjectId.getString(3));
-
-                stmUpdateCheck.executeUpdate();
-            }
+            putConfig(stmObjectId, stmUpdateConfig, stmUpdateCheck, config);
         } catch (SQLException e) {
-            LOG.warning("putConfig Ошибка обращения к базе " + e.getMessage() +
-                    " config: " + config + " serverName: " + serverName);
+            LOG.log(Level.WARNING, "Ошибка обращения к базе; server name: " + serverName + "; ip address: " +
+                    ipAddress + "; config: " + config, e);
+            context.setRollbackOnly();
         }
     }
 
-    private int getCount(PreparedStatement stmUpdateConfig, ResultSet resObjectId, int count, Set<String> config) throws SQLException {
-        for (String item: config) {
-            String[] items = item.split("::");
-            if (items.length == 2) {
-                stmUpdateConfig.setString(1, items[0]);
-                stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + items[0] + "</ItemName><SysInfo>" + items[1] + "</SysInfo>");
-            } else {
-                stmUpdateConfig.setString(1, item);
-                stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + item + "</ItemName>");
-            }
-            stmUpdateConfig.setString(3, resObjectId.getString(1));
+    private void putConfig(PreparedStatement stmObjectId, PreparedStatement stmUpdateConfig,
+                                  PreparedStatement stmUpdateCheck, Set<String> config) throws SQLException {
+        ResultSet resObjectId = stmObjectId.executeQuery();
+        while (resObjectId.next()) {
+            int count = 0;
 
-            try {
-                stmUpdateConfig.executeUpdate();
-                count++;
-                LOG.info("putConfig Успешная вставка " + item);
-            } catch (SQLException e) {
-                LOG.warning("putConfig Запись уже существует " + item);
+            for (String item: config) {
+                String[] items = item.split("::");
+                if (items.length == 2) {
+                    stmUpdateConfig.setString(1, items[0]);
+                    stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + items[0] +
+                            "</ItemName><SysInfo>" + items[1] + "</SysInfo>");
+                } else {
+                    stmUpdateConfig.setString(1, item);
+                    stmUpdateConfig.setString(2, "<ItemName>" + resObjectId.getString(2) + ":" + item + "</ItemName>");
+                }
+                stmUpdateConfig.setString(3, resObjectId.getString(1));
+
+                try {
+                    stmUpdateConfig.executeUpdate();
+                    count++;
+                    LOG.info("Успешная вставка параметра: " + item);
+                } catch (SQLException e) {
+                    // TODO Сделать проверку на существование записи и ничего не выводить если запись существует
+                    LOG.warning("putConfig Запись уже существует " + item);
+                }
             }
+
+            stmUpdateCheck.setInt(1, 1);
+            stmUpdateCheck.setString(2, "<" + resObjectId.getString(2) + ">" + config.size() + "</" + resObjectId.getString(2) + ">");
+            stmUpdateCheck.setString(3, "Получено '" + config.size() + "' элементов по объекту '" + resObjectId.getString(2) +
+                    "'. '" + count + "' новых элементов.");
+            stmUpdateCheck.setString(4, resObjectId.getString(3));
+
+            stmUpdateCheck.executeUpdate();
         }
-        return count;
     }
 
     @Override
@@ -404,7 +417,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             if (resGetObject.next()) {
                 objectId = resGetObject.getString(1);
             } else {
-                return null;
+                return paramList;
             }
 
             ResultSet resStartDate;
@@ -429,15 +442,16 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                         (resLinked.getString(5) == null) ? null : resLinked.getString(5).substring(2)));
             }
         } catch (SQLException e) {
-            LOG.warning("loadObjectParams SQLException: " + e.getMessage());
+            LOG.log(Level.WARNING, "Error when load parameters list", e);
         }
 
-        LOG.info("loadObjectParams object: " + objectName + ":" + serverName +
-                " parameters count: " + paramList.size());
+        LOG.info("object: " + objectName + ":" + serverName + " parameters count: " + paramList.size());
 
         return paramList;
     }
 
+    // TODO Как то проверить работу асинхронного метода, похоже он так не работает, и возможно сделать два
+    //  метода один синхронный один асинхронный. Для разгузки данных по pushEvent нужен синхронный метод
     @Override
     @Asynchronous
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
@@ -461,20 +475,19 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                 }
             }
 
-            if (dataList.size() > 0) {
+            if (!dataList.isEmpty()) {
                 long timer = System.currentTimeMillis();
-//                LOG.info("putData put: " + dataList.size() + " values " + paramList);
 
                 Array array = connect.createOracleArray("T_DZ_UTIL_INPUT_DATA", dataList.toArray());
 
                 stm.setArray(1, array);
                 stm.execute();
 
-                LOG.info("putData done put: " + dataList.size() + 
-                        " values; put time: " + (System.currentTimeMillis() - timer));
+                LOG.info("execute upload data; values count: " + dataList.size() +
+                        "; upload time: " + (System.currentTimeMillis() - timer) + " milli seconds");
             }
         } catch (SQLException e) {
-            LOG.warning("putData error upload: " + e.getMessage() + " " + paramList);
+            LOG.log(Level.WARNING, "error upload data: " + paramList, e);
         }
         return null;
     }
@@ -578,6 +591,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             }
         } catch (SQLException e) {
             LOG.log(Level.WARNING, "Ошибка импорта мгновенных данных в базу", e);
+            context.setRollbackOnly();
             return;
         }
 
@@ -604,7 +618,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                 }
             }
         } catch (SQLException e) {
-            LOG.warning("Error when load last value of parameter: " + e.getMessage());
+            LOG.log(Level.WARNING, "Error when load last value of parameter", e);
         }
         return result;
     }
@@ -624,7 +638,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                 }
             }
         } catch (SQLException e) {
-            LOG.warning("error when check instant request: " + e.getMessage() + " serverName: " + serverName);
+            LOG.log(Level.WARNING, "error when check instant request server name: " + serverName, e);
         }
     }
 
@@ -640,7 +654,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                         null, (res.getString(5) == null) ? null : res.getString(5).substring(2)));
             }
         } catch (SQLException e) {
-            LOG.warning("error while load instant data parameters: " + e.getMessage());
+            LOG.log(Level.WARNING, "error while load instant data parameters for server name: " + serverName + " url: " + url, e);
         }
         return result;
     }

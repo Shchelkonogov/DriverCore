@@ -5,7 +5,6 @@ import ru.tecon.model.DataModel;
 import javax.ejb.Local;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 
@@ -54,10 +53,10 @@ public interface LoadOPCLocal {
      * Метод выгружает конфигурацию сервера в базу
      * @param config конфигурация сервера (список параметров,
      *               которые может отдавать сервер)
-     * @param instantConfig конфигурация мгновенных данный от приборов
+     * @param ipAddress ip адрес по которому грузилась мгновенная конфигурация
      * @param serverName имя сервера
      */
-    void putConfig(Set<String> config, Map<String, Set<String>> instantConfig, String serverName);
+    void putConfig(Set<String> config, String ipAddress, String serverName);
 
     /**
      * Метод выгружает из базы список параметров для
@@ -93,11 +92,13 @@ public interface LoadOPCLocal {
     void putInstantData(List<DataModel> paramList);
 
     /**
-     * Метод для выгрузки списка URL по которым база запросила конфигурацию сервера
+     * Метод для проверки запроса от базы на выгрузку конфигурации.
+     * Если есть запрос, то через websocket обращается к нужному серверу
+     * и передает ему ip адрес для загрузки.
+     * Если ip адрес не распознан, то запрос по webSocket не отправляется
      * @param serverName имя сервера
-     * @return список URL
      */
-    ArrayList<String> getURLToLoadConfig(String serverName);
+    void checkConfigRequest(String serverName);
 
     /**
      * Метод для проверки запроса от базы на мгновенные данные.
