@@ -2,6 +2,9 @@ package ru.tecon;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Properties;
 import java.util.logging.Logger;
 
@@ -12,12 +15,14 @@ public class ProjectProperty {
 
     private static Logger LOG = Logger.getLogger(ProjectProperty.class.getName());
 
+    private static final String userDir = System.getProperty("user.dir");
+
     private static int port;
     private static int instantPort;
-    private static String configFile;
-    private static String instantConfigFile;
+    private static Path configFile;
+    private static Path instantConfigFile;
     private static String serverName;
-    private static String logFolder;
+    private static Path logFolder;
     private static String serverURI;
     private static String serverPort;
     private static boolean pushFromDataBase = false;
@@ -34,10 +39,18 @@ public class ProjectProperty {
 
             port = Integer.parseInt(prop.getProperty("port"));
             instantPort = Integer.parseInt(prop.getProperty("instantPort"));
-            configFile = prop.getProperty("configFile");
-            instantConfigFile = prop.getProperty("instantFile");
+
+            String property = prop.getProperty("configFile");
+            configFile = Paths.get(property.startsWith("/") ? userDir + property : property);
+
+            property = prop.getProperty("instantFile");
+            instantConfigFile = Paths.get(property.startsWith("/") ? userDir + property : property);
+
             serverName = prop.getProperty("serverName");
-            logFolder = prop.getProperty("logFolder");
+
+            property = prop.getProperty("logFolder");
+            logFolder = Paths.get(property.startsWith("/") ? userDir + property : property);
+
             serverURI = prop.getProperty("serverURI");
             serverPort = prop.getProperty("serverPort");
 
@@ -46,8 +59,9 @@ public class ProjectProperty {
                 pushFromDataBase = true;
             }
 
-            if ((port == 0) || (configFile == null) || (serverName == null) || (logFolder == null) ||
-                    (serverURI == null) || (serverPort == null)) {
+            if ((port == 0) || (serverName == null) || (logFolder == null) ||
+                    (serverURI == null) || (serverPort == null) || (instantPort == 0) ||
+                    !Files.exists(configFile) || !Files.exists(instantConfigFile) || !Files.exists(logFolder)) {
                 LOG.warning("loadProperties error не хвататет полей в конфигурационном файле");
                 System.exit(-1);
             }
@@ -61,7 +75,7 @@ public class ProjectProperty {
         return port;
     }
 
-    static String getConfigFile() {
+    static Path getConfigFile() {
         return configFile;
     }
 
@@ -69,7 +83,7 @@ public class ProjectProperty {
         return serverName;
     }
 
-    public static String getLogFolder() {
+    public static Path getLogFolder() {
         return logFolder;
     }
 
@@ -89,7 +103,7 @@ public class ProjectProperty {
         return instantPort;
     }
 
-    public static String getInstantConfigFile() {
+    public static Path getInstantConfigFile() {
         return instantConfigFile;
     }
 }
