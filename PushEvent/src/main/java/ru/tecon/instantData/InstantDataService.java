@@ -4,6 +4,10 @@ import ru.tecon.ProjectProperty;
 import ru.tecon.model.DataModel;
 import ru.tecon.model.ValueModel;
 import ru.tecon.Utils;
+import ru.tecon.server.EchoSocketServer;
+import ru.tecon.traffic.MonitorInputStream;
+import ru.tecon.traffic.MonitorOutputStream;
+import ru.tecon.traffic.Statistic;
 
 import javax.naming.NamingException;
 import java.io.*;
@@ -70,7 +74,7 @@ public class InstantDataService {
                 try {
                     Utils.loadRMI().checkInstantRequest(ProjectProperty.getServerName());
                 } catch (NamingException e) {
-                    LOG.warning("error instant data service. Message: " + e.getMessage());
+                    LOG.log(Level.WARNING, "error instant data service", e);
                 }
             }, 5, 30, TimeUnit.SECONDS);
         }
@@ -111,7 +115,7 @@ public class InstantDataService {
                             }
                             break;
                         case 5:
-                            // TODO реализовать вариант для String размер string указан в sysInfo
+                            // TODO реализовать вариант для String размер string указан в sysInfo и открыть доступ к String в InstantTypes
                             break;
                     }
                 }
@@ -129,8 +133,16 @@ public class InstantDataService {
 
             Socket socket = new Socket(InetAddress.getByName(url), ProjectProperty.getInstantPort());
 
-            DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-            DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+            Statistic st = EchoSocketServer.getStatistic(url);
+
+            MonitorInputStream monitorIn = new MonitorInputStream(socket.getInputStream());
+            monitorIn.setStatistic(st);
+
+            MonitorOutputStream monitorOut = new MonitorOutputStream(socket.getOutputStream());
+            monitorOut.setStatistic(st);
+
+            DataInputStream in = new DataInputStream(new BufferedInputStream(monitorIn));
+            DataOutputStream out = new DataOutputStream(new BufferedOutputStream(monitorOut));
 
             // Реализую запрос на создание списка переменных
             ByteBuffer head = ByteBuffer.allocate(16 + size).order(ByteOrder.LITTLE_ENDIAN)
