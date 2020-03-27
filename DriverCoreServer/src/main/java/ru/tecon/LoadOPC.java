@@ -34,7 +34,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     private static final Logger LOG = Logger.getLogger(LoadOPC.class.getName());
 
     private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH");
-    private static final Pattern PATTERN_IPV4 = Pattern.compile("(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])", Pattern.CASE_INSENSITIVE);
+    private static final Pattern PATTERN_IPV4 = Pattern.compile("_(?<ip>((0|1\\d?\\d?|2[0-4]?\\d?|25[0-5]?|[3-9]\\d?)\\.){3}(0|1\\d?\\d?|2[0-4]?\\d?|25[0-5]?|[3-9]\\d?))_", Pattern.CASE_INSENSITIVE);
 
     /**
      * insert который загружает объект в базу <br>
@@ -69,7 +69,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * по которым база запросила конфигурацию сервера <br>
      * параметр - имя сервера
      */
-    private static final String SQL_GET_REQUEST_LOAD_CONFIG = "select extractValue(XMLType('<Group>' || args || '</Group>'), '/Group/ItemName') " +
+    private static final String SQL_GET_REQUEST_LOAD_CONFIG = "select extractValue(XMLType('<Group>' || args || '</Group>'), '/Group/ItemName'), id " +
             "from arm_commands where kind = 'ForceBrowse' " +
             "and extractValue(XMLType('<Group>' || args || '</Group>'), '/Group/Server') = ? and is_success_execution is null";
 
@@ -93,9 +93,9 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     private static final String SQL_GET_OPC_OBJECT_ID_2 = "select b.id, b.display_name, a.id from arm_commands a " +
             "inner join tsa_opc_object b " +
             "on a.args = b.opc_path and a.kind = 'ForceBrowse' " +
-            "and a.is_success_execution is null " +
+            "and (a.is_success_execution = 2 or a.is_success_execution is null) " +
             "and extractValue(XMLType('<Group>' || a.args || '</Group>'), '/Group/Server') = ? " +
-            "and extractValue(XMLType('<Group>' || a.args || '</Group>'), '/Group/ItemName') = ?";
+            "and extractValue(XMLType('<Group>' || a.args || '</Group>'), '/Group/ItemName') like ?";
     /**
      * insert который загружает в базу конфигурацию сервера <br>
      * первый параметр - имя параметра <br>
@@ -155,17 +155,12 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * select objectId по которым надо запустить загрузку мгновенных данных
      * параметр - имя сервера
      */
-    private static final String SQL_CHECK_INSTANT_LOAD = "select distinct(to_number(extractValue(XMLType(args), '/ObjectId'))) " +
-            "from arm_commands where to_number(extractValue(XMLType(args), '/ObjectId')) " +
-            "in (select id from opc_object where linked = 1 and server_name = ?) " +
-            "and kind = 'AsyncRefresh' and is_success_execution is null";
-    /**
-     * select url по котрым надо загрузить мгновенные данные
-     * парметр - objectId
-     */
-    private static final String SQL_GET_URL_TO_LOAD_INSTANT_DATA = "select display_name from tsa_opc_object " +
-            "where id = (select opc_object_id from tsa_linked_object " +
-            "where subscribed = 1 and aspid_object_id = ?)";
+    private static final String SQL_CHECK_INSTANT_LOAD = "select a.id, b.display_name from arm_commands a, tsa_opc_object b " +
+            "    where to_number(extractValue(XMLType(args), '/ObjectId')) in " +
+            "          (select id from opc_object where linked = 1 and server_name = ?) " +
+            "      and kind = 'AsyncRefresh' and is_success_execution is null " +
+            "      and b.id = (select opc_object_id from tsa_linked_object " +
+            "           where subscribed = 1 and aspid_object_id = to_number(extractValue(XMLType(a.args), '/ObjectId')))";
 
 
     /**
@@ -201,7 +196,8 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * первый параметр - <ObjectId>id объекта</ObjectId>
      */
     private static final String SQL_GET_INSTANT_COMMAND_ID = "select id from arm_commands " +
-            "where args = ? and kind = 'AsyncRefresh' and is_success_execution is null";
+            "where to_number(extractValue(XMLType(args), '/ObjectId')) = ? " +
+            "and kind = 'AsyncRefresh' and (is_success_execution is null or is_success_execution = 2)";
 
     /**
      * insert для заполнения таблицы мгновенными данными
@@ -310,18 +306,41 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     }
 
     @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public void checkConfigRequest(String serverName) {
         try (Connection connect = ds.getConnection();
-             PreparedStatement stm = connect.prepareStatement(SQL_GET_REQUEST_LOAD_CONFIG)) {
+             PreparedStatement stm = connect.prepareStatement(SQL_GET_REQUEST_LOAD_CONFIG);
+             PreparedStatement stmUpdate = connect.prepareStatement(SQL_UPDATE_CHECK)) {
             stm.setString(1, serverName);
+
+            Map<String, Set<String>> ipMap = new HashMap<>();
 
             ResultSet res = stm.executeQuery();
             while (res.next()) {
                 Matcher m = PATTERN_IPV4.matcher(res.getString(1));
                 if (m.find()) {
-                    WebSocketServer.sendTo(serverName, "loadConfig " + m.group());
+                    ipMap.putIfAbsent(m.group("ip"), new HashSet<>());
+                    ipMap.get(m.group("ip")).add(res.getString(2));
                 } else {
-                    LOG.warning("Есть запрос на конфигурацию но он не содержит ip address");
+                    LOG.warning("Есть запрос на конфигурацию но он не содержит ip address " + res.getString(1) +
+                            " server name: " + serverName);
+                }
+            }
+
+            for (String ip: ipMap.keySet()) {
+                try {
+                    for (String id: ipMap.get(ip)) {
+                        stmUpdate.setInt(1, 2);
+                        stmUpdate.setString(2, null);
+                        stmUpdate.setString(3, "Обработка запроса на конфигурацию");
+                        stmUpdate.setString(4, id);
+
+                        stmUpdate.addBatch();
+                    }
+                    stmUpdate.executeBatch();
+                    WebSocketServer.sendTo(serverName, "loadConfig " + ip);
+                } catch (SQLException e) {
+                    LOG.log(Level.WARNING, "error while update status", e);
                 }
             }
         } catch (SQLException e) {
@@ -353,7 +372,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
              PreparedStatement stmUpdateConfig = connect.prepareStatement(SQL_INSERT_CONFIG);
              PreparedStatement stmUpdateCheck = connect.prepareStatement(SQL_UPDATE_CHECK)) {
             stmObjectId.setString(1, serverName);
-            stmObjectId.setString(2, ipAddress);
+            stmObjectId.setString(2, "%_" + ipAddress + "_%");
 
             putConfig(stmObjectId, stmUpdateConfig, stmUpdateCheck, config);
         } catch (SQLException e) {
@@ -556,7 +575,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                     }
                 }
 
-                stmGetId.setString(1, "<ObjectId>" + id + "</ObjectId>");
+                stmGetId.setInt(1, id);
 
                 ResultSet res = stmGetId.executeQuery();
                 while (res.next()) {
@@ -624,17 +643,41 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     }
 
     @Override
+    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public void checkInstantRequest(String serverName) {
         try (Connection connect = ds.getConnection();
-             PreparedStatement stmGetObjectId = connect.prepareStatement(SQL_CHECK_INSTANT_LOAD);
-             PreparedStatement stmGetUrl = connect.prepareStatement(SQL_GET_URL_TO_LOAD_INSTANT_DATA)) {
-            stmGetObjectId.setString(1, serverName);
-            ResultSet resObjectId = stmGetObjectId.executeQuery();
-            while (resObjectId.next()) {
-                stmGetUrl.setInt(1, resObjectId.getInt(1));
-                ResultSet resUrl = stmGetUrl.executeQuery();
-                if (resUrl.next()) {
-                    WebSocketServer.sendTo(serverName, "loadInstantData " + resUrl.getString(1).split("_")[1]);
+             PreparedStatement stm = connect.prepareStatement(SQL_CHECK_INSTANT_LOAD);
+             PreparedStatement stmUpdate = connect.prepareStatement(SQL_UPDATE_CHECK)) {
+            stm.setString(1, serverName);
+
+            Map<String, Set<String>> ipMap = new HashMap<>();
+
+            ResultSet res = stm.executeQuery();
+            while (res.next()) {
+                Matcher m = PATTERN_IPV4.matcher(res.getString(2));
+                if (m.find()) {
+                    ipMap.putIfAbsent(m.group("ip"), new HashSet<>());
+                    ipMap.get(m.group("ip")).add(res.getString(1));
+                } else {
+                    LOG.warning("Есть запрос на мгновенные данные но он не содержит ip address: " + res.getString(2) +
+                            " server name: " + serverName);
+                }
+            }
+
+            for (String ip: ipMap.keySet()) {
+                try {
+                    for (String id: ipMap.get(ip)) {
+                        stmUpdate.setInt(1, 2);
+                        stmUpdate.setString(2, null);
+                        stmUpdate.setString(3, "Обработка запроса на мгновенные данные");
+                        stmUpdate.setString(4, id);
+
+                        stmUpdate.addBatch();
+                    }
+                    stmUpdate.executeBatch();
+                    WebSocketServer.sendTo(serverName, "loadInstantData " + ip);
+                } catch (SQLException e) {
+                    LOG.log(Level.WARNING, "error while update status", e);
                 }
             }
         } catch (SQLException e) {
