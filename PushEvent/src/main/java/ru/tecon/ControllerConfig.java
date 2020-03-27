@@ -2,6 +2,8 @@ package ru.tecon;
 
 import com.jcraft.jsch.*;
 import ru.tecon.instantData.InstantDataTypes;
+import ru.tecon.server.EchoSocketServer;
+import ru.tecon.traffic.MonitorInputStream;
 
 import javax.naming.NamingException;
 import java.io.BufferedReader;
@@ -162,15 +164,25 @@ public class ControllerConfig {
             channel.connect();
 
             StringBuilder sb = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(channel.getInputStream()))) {
-                reader.lines().forEach(s -> {
-                    if (!s.isEmpty()) {
-                        sb.append(s).append("\n");
-                    }
-                });
+
+            try (MonitorInputStream monitor = new MonitorInputStream(channel.getInputStream())) {
+                monitor.setStatistic(EchoSocketServer.getStatistic(url));
+
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(monitor))) {
+                    reader.lines().forEach(s -> {
+                        if (!s.isEmpty()) {
+                            sb.append(s).append("\n");
+                        }
+                    });
+                } catch (IOException e) {
+                    LOG.log(Level.WARNING, "error ssh file read", e);
+                }
             } catch (IOException e) {
-                LOG.warning("error ssh file read: " + e.getMessage());
+                LOG.log(Level.WARNING, "error with my monitor", e);
             }
+
+            channel.disconnect();
+            session.disconnect();
 
             LOG.info("symbol table from url: " + url + " is loaded");
 
@@ -278,11 +290,8 @@ public class ControllerConfig {
                     }
                 }
             }
-
-            channel.disconnect();
-            session.disconnect();
         } catch (JSchException e) {
-            LOG.warning("error ssh connect: " + e.getMessage());
+            LOG.log(Level.WARNING, "error ssh connect", e);
         }
 
         return result;
