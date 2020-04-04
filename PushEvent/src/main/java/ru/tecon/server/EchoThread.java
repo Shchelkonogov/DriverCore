@@ -1,13 +1,14 @@
 package ru.tecon.server;
 
-import ru.tecon.ControllerConfig;
-import ru.tecon.ProjectProperty;
-import ru.tecon.Utils;
+import ru.tecon.*;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.exception.MySocketException;
 import ru.tecon.model.DataModel;
 import ru.tecon.server.model.ParseDataModel;
 import ru.tecon.model.ValueModel;
+import ru.tecon.traffic.MonitorInputStream;
+import ru.tecon.traffic.MonitorOutputStream;
+import ru.tecon.traffic.Statistic;
 
 import javax.naming.NamingException;
 import java.io.*;
@@ -43,8 +44,17 @@ public class EchoThread extends Thread {
         DataOutputStream out;
 
         try {
-            in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-            out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+            Statistic statistic = EchoSocketServer.getStatistic(socket.getInetAddress().getHostAddress());
+            statistic.setSocket(socket);
+            statistic.setThread(this);
+
+            MonitorInputStream monitorIn = new MonitorInputStream(socket.getInputStream());
+            monitorIn.setStatistic(statistic);
+            in = new DataInputStream(new BufferedInputStream(monitorIn));
+
+            MonitorOutputStream monitorOut = new MonitorOutputStream(socket.getOutputStream());
+            monitorOut.setStatistic(statistic);
+            out = new DataOutputStream(new BufferedOutputStream(monitorOut));
         } catch (IOException e) {
             LOG.warning("run Error create data streams Message: " + e.getMessage()
                     + " Thread: " + this.getId() + " ObjectName: " + objectName);
