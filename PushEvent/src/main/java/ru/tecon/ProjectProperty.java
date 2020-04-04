@@ -6,7 +6,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -68,11 +67,10 @@ public class ProjectProperty {
                     (serverURI == null) || (serverPort == null) || (instantPort == 0) ||
                     !Files.exists(configFile) || !Files.exists(instantConfigFile) || !Files.exists(logFolder)) {
                 LOG.warning("loadProperties error не хвататет полей в конфигурационном файле");
-                System.exit(-1);
+                Utils.error("loadProperties error не хвататет полей в конфигурационном файле");
             }
         } catch (IOException | NumberFormatException e) {
-            LOG.warning("loadProperties error properties load: " + e.getMessage());
-            System.exit(-1);
+            Utils.error("loadProperties error properties load:", e);
         }
     }
 

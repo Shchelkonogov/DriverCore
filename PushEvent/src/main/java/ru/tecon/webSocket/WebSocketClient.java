@@ -2,6 +2,7 @@ package ru.tecon.webSocket;
 
 import ru.tecon.ControllerConfig;
 import ru.tecon.ProjectProperty;
+import ru.tecon.Utils;
 import ru.tecon.instantData.InstantDataService;
 
 import javax.websocket.*;
@@ -70,8 +71,7 @@ public class WebSocketClient {
                 }, 28, 28, TimeUnit.SECONDS);
             }
         } catch (DeploymentException | IOException e) {
-            log.log(Level.WARNING, "Ошибка запуска webSocketClient", e);
-            System.exit(-1);
+            Utils.error("Ошибка запуска webSocketClient", e);
         }
     }
 
