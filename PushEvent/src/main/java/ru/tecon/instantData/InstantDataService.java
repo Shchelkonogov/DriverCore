@@ -68,7 +68,7 @@ public class InstantDataService {
      * Метод запускает службу которая обрабатывает запросы на мгновенные данные
      */
     public static void startService() {
-        if (!ProjectProperty.isPushFromDataBase()) {
+        if (ProjectProperty.isCheckRequestService()) {
             service = Executors.newSingleThreadScheduledExecutor();
             future = service.scheduleWithFixedDelay(() -> {
                 try {

@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Properties;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -25,7 +26,7 @@ public class ProjectProperty {
     private static Path logFolder;
     private static String serverURI;
     private static String serverPort;
-    private static boolean pushFromDataBase = false;
+    private static boolean checkRequestService = true;
 
     /**
      * Метод выгружает конфигурацию из файла в себя
@@ -58,9 +59,9 @@ public class ProjectProperty {
             serverURI = prop.getProperty("serverURI");
             serverPort = prop.getProperty("serverPort");
 
-            if ((prop.getProperty("pushFromDataBase") != null) &&
-                    (prop.getProperty("pushFromDataBase").equals("true"))) {
-                pushFromDataBase = true;
+            if ((prop.getProperty("checkRequestService") != null) &&
+                    (prop.getProperty("checkRequestService").equals("false"))) {
+                checkRequestService = false;
             }
 
             if ((port == 0) || (serverName == null) || (logFolder == null) ||
@@ -99,15 +100,15 @@ public class ProjectProperty {
         return serverPort;
     }
 
-    public static boolean isPushFromDataBase() {
-        return pushFromDataBase;
+    public static boolean isCheckRequestService() {
+        return checkRequestService;
     }
 
     public static int getInstantPort() {
         return instantPort;
     }
 
-    public static Path getInstantConfigFile() {
+    static Path getInstantConfigFile() {
         return instantConfigFile;
     }
 }

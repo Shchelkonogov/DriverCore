@@ -108,7 +108,7 @@ public class ControllerConfig {
      * Метод запускает службу которая обрабатывает запросы на конфигурацию из базы
      */
     public static void startUploaderService() {
-        if (!ProjectProperty.isPushFromDataBase()) {
+        if (ProjectProperty.isCheckRequestService()) {
             service = Executors.newSingleThreadScheduledExecutor();
             future = service.scheduleWithFixedDelay(() -> {
                 try {
