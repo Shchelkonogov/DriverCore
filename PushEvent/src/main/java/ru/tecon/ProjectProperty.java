@@ -35,7 +35,11 @@ public class ProjectProperty {
         Properties prop = new Properties();
 
         try {
-            prop.load(new FileInputStream(path));
+            if (Files.exists(Paths.get(path))) {
+                prop.load(new FileInputStream(path));
+            } else {
+                prop.load(ProjectProperty.class.getResourceAsStream("/config.properties"));
+            }
 
             port = Integer.parseInt(prop.getProperty("port"));
             instantPort = Integer.parseInt(prop.getProperty("instantPort"));
