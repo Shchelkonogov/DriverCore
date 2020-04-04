@@ -508,7 +508,8 @@ public class EchoThread extends Thread {
 
         System.out.println("repeatCount " + repeatCount);
 
-        Files.write(Paths.get(ProjectProperty.getLogFolder() + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS")) + ".txt"), result);
+        Files.write(Paths.get(ProjectProperty.getLogFolder().toAbsolutePath().toString() + "/" +
+                LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS")) + ".txt"), result);
 
         return repeatCount;
     }
