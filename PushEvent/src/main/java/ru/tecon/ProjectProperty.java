@@ -1,5 +1,7 @@
 package ru.tecon;
 
+import ru.tecon.exception.MyServerStartException;
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,7 +33,7 @@ public class ProjectProperty {
      * Метод выгружает конфигурацию из файла в себя
      * @param path путь к файлу конфигурации
      */
-    public static void loadProperties(String path) {
+    public static void loadProperties(String path) throws MyServerStartException {
         Properties prop = new Properties();
 
         try {

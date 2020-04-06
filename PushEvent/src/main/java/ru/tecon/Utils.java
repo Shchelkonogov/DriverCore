@@ -1,6 +1,7 @@
 package ru.tecon;
 
 import ru.tecon.beanInterface.LoadOPCRemote;
+import ru.tecon.exception.MyServerStartException;
 import ru.tecon.server.EchoSocketServer;
 
 import javax.naming.Context;
@@ -36,7 +37,7 @@ public class Utils {
      * Метод для корректного закрытия приложения в случае ошибки
      * @param message сообщение выключения приложения
      */
-    public static void error(String message) {
+    public static void error(String message) throws MyServerStartException {
         error(message, null);
     }
 
@@ -45,7 +46,7 @@ public class Utils {
      * @param message сообщение выключения приложения
      * @param ex java exception для отображения
      */
-    public static void error(String message, Exception ex) {
+    public static void error(String message, Exception ex) throws MyServerStartException {
         if (ex == null) {
             log.warning(message);
             System.out.println(message);
@@ -64,6 +65,7 @@ public class Utils {
             }
         } else {
             EchoSocketServer.stopSocket();
+            throw new MyServerStartException(message);
         }
     }
 }

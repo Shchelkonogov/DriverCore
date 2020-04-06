@@ -3,6 +3,7 @@ package ru.tecon.webSocket;
 import ru.tecon.ControllerConfig;
 import ru.tecon.ProjectProperty;
 import ru.tecon.Utils;
+import ru.tecon.exception.MyServerStartException;
 import ru.tecon.instantData.InstantDataService;
 
 import javax.websocket.*;
@@ -45,14 +46,18 @@ public class WebSocketClient {
     @OnClose
     public void onClose() {
         if (restartService) {
-            connectToWebSocketServer();
+            try {
+                connectToWebSocketServer();
+            } catch (MyServerStartException e) {
+                System.exit(-1);
+            }
         }
     }
 
     /**
      * Метод запускает работу webSocketClient
      */
-    public void connectToWebSocketServer() {
+    public void connectToWebSocketServer() throws MyServerStartException {
         restartService = true;
         WebSocketContainer container = ContainerProvider.getWebSocketContainer();
         try {
@@ -79,13 +84,17 @@ public class WebSocketClient {
      * Метод останавливает работу websocketClient;
      */
     public void stopService() {
-        future.cancel(true);
-        service.shutdown();
+        if (service != null) {
+            future.cancel(true);
+            service.shutdown();
+        }
 
         restartService = false;
 
         try {
-            session.close();
+            if (session != null) {
+                session.close();
+            }
         } catch (IOException e) {
             log.log(Level.WARNING, "Ошибка закрытия webSocketClient", e);
         }
