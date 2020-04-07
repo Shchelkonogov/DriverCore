@@ -86,7 +86,14 @@ public class InstantDataService {
      */
     public static void uploadInstantData(String url) {
         String errorPath = ProjectProperty.getServerName() + "_" + url;
+
         try {
+            if (EchoSocketServer.isBlocked(url)) {
+                LOG.info("traffic block");
+                Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath, "Превышение трафика по объекту '" + errorPath + "'");
+                return;
+            }
+
             List<DataModel> parameters = Utils.loadRMI().loadObjectInstantParameters(ProjectProperty.getServerName(), url);
 
             LOG.info("load instantData for url: " + url + " parameters count: " + parameters.size());

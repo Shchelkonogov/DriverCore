@@ -149,6 +149,11 @@ public class ControllerConfig {
 
         Set<String> result = new HashSet<>();
 
+        if (EchoSocketServer.isBlocked(url)) {
+            LOG.info("traffic block");
+            return result;
+        }
+
         try {
             Properties prop = new Properties();
             prop.put("StrictHostKeyChecking", "no");
