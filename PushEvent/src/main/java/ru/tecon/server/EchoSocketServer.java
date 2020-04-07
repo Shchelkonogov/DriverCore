@@ -12,6 +12,9 @@ import ru.tecon.webSocket.WebSocketClient;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.Level;
@@ -29,6 +32,9 @@ public class EchoSocketServer {
 
     private static ConcurrentMap<String, Statistic> statistic = new ConcurrentHashMap<>();
     private static ServerSocket serverSocket;
+
+    private static ScheduledExecutorService service;
+    private static ScheduledFuture future;
 
     private static boolean closeApplication = true;
 
@@ -71,6 +77,20 @@ public class EchoSocketServer {
         log.info("Instant data service start");
         System.out.println("Сервис обработки запросов на мгновенные данные запущен");
 
+        long midnight= LocalDateTime.now().until(LocalDate.now().plusDays(1).atStartOfDay(), ChronoUnit.MINUTES);
+        service = Executors.newSingleThreadScheduledExecutor();
+        future = service.scheduleAtFixedRate(() ->
+                statistic.forEach((s, st) -> {
+                    st.clearDayTraffic();
+                    if (LocalDate.now().getDayOfMonth() == 1) {
+                        st.clearMonthTraffic();
+                    }
+                }
+        ), midnight, TimeUnit.DAYS.toMinutes(1), TimeUnit.MINUTES);
+
+        log.info("Statistic service start");
+        System.out.println("Сервис статистики запущен");
+
         // Запускаем serverSocket
         Socket socket;
 
@@ -97,9 +117,11 @@ public class EchoSocketServer {
             }
 
             log.info("new connection from " + socket.getInetAddress().getHostAddress());
-            EchoThread thread = new EchoThread(socket, ProjectProperty.getServerName());
 
-            thread.start();
+            if (!isBlocked(socket.getInetAddress().getHostAddress())) {
+                EchoThread thread = new EchoThread(socket, ProjectProperty.getServerName());
+                thread.start();
+            }
         }
     }
 
@@ -110,6 +132,11 @@ public class EchoSocketServer {
         webSocketClient.stopService();
         ControllerConfig.stopUploaderService();
         InstantDataService.stopService();
+
+        if (Objects.nonNull(service)) {
+            future.cancel(true);
+            service.shutdown();
+        }
 
         try {
             if (serverSocket != null) {
@@ -127,6 +154,11 @@ public class EchoSocketServer {
     public static Statistic getStatistic(String ip) {
         statistic.putIfAbsent(ip, new Statistic(ip, event));
         return statistic.get(ip);
+    }
+
+    public static boolean isBlocked(String ip) {
+        Statistic st = statistic.get(ip);
+        return ((st != null) && st.isBlock());
     }
 
     public static void setEvent(Event event) {
