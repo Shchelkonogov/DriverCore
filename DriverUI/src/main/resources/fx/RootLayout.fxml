@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.layout.AnchorPane?>
+
+<AnchorPane prefHeight="400.0" prefWidth="1084.0" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="ru.tecon.controller.RootLayoutController">
+   <children>
+      <TabPane layoutX="52.0" layoutY="156.0" prefHeight="244.0" prefWidth="600.0" tabClosingPolicy="UNAVAILABLE" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+        <tabs>
+          <Tab text="Статистика">
+            <content>
+              <AnchorPane minHeight="0.0" minWidth="0.0" prefHeight="180.0" prefWidth="200.0">
+                     <children>
+                        <TableView fx:id="tableView" layoutX="100.0" layoutY="7.0" prefHeight="361.0" prefWidth="708.0" stylesheets="@../style.css" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+                          <columns>
+                            <TableColumn fx:id="ipColumn" minWidth="120.0" prefWidth="120.0" text="ip адрес" />
+                              <TableColumn minWidth="169.0" prefWidth="169.0" text="сокет">
+                                 <columns>
+                                    <TableColumn fx:id="time2" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="дата открытия" />
+                                    <TableColumn fx:id="socketCountColumn" minWidth="80.0" styleClass="center-column" text="кол-во" />
+                                 </columns>
+                              </TableColumn>
+                              <TableColumn fx:id="block" minWidth="120.0" prefWidth="120.0" styleClass="center-column" text="статус" />
+                              <TableColumn prefWidth="75.0" text="трафик">
+                                 <columns>
+                                    <TableColumn fx:id="time1" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="начало счета" />
+                                    <TableColumn fx:id="inputTrafficColumn" minWidth="100.0" prefWidth="100.0" styleClass="center-column" text="входящий" />
+                                    <TableColumn fx:id="outputTrafficColumn" minWidth="100.0" prefWidth="100.0" styleClass="center-column" text="исходящий" />
+                                    <TableColumn fx:id="trafficColumn" minWidth="140.0" prefWidth="140.0" styleClass="center-column" text="общий суточный" />
+                                    <TableColumn fx:id="monthTrafficColumn" minWidth="140.0" prefWidth="140.0" styleClass="center-column" text="общий месячный" />
+                                 </columns>
+                              </TableColumn>
+                          </columns>
+                        </TableView>
+                     </children>
+                  </AnchorPane>
+            </content>
+          </Tab>
+        </tabs>
+      </TabPane>
+      <Button fx:id="startButton" layoutX="14.0" layoutY="14.0" maxHeight="25.0" maxWidth="25.0" minHeight="25.0" minWidth="25.0" mnemonicParsing="false" onAction="#onStartClick" styleClass="start-button" stylesheets="@../style.css" AnchorPane.rightAnchor="40.0" AnchorPane.topAnchor="7.0" />
+      <Button fx:id="stopButton" disable="true" layoutX="518.0" layoutY="4.0" maxHeight="25.0" maxWidth="25.0" minHeight="25.0" minWidth="25.0" mnemonicParsing="false" onAction="#onStopClick" styleClass="stop-button" stylesheets="@../style.css" AnchorPane.rightAnchor="5.0" AnchorPane.topAnchor="7.0" />
+   </children>
+</AnchorPane>

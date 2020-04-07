@@ -1,0 +1,13 @@
+.start-button {
+    -fx-shape: "M 400 300 L 500 350 L 400 400 Z";
+    -fx-base: green;
+}
+
+.stop-button {
+    -fx-shape: "M 400 350 L 450 350 L 450 400 L 400 400 Z";
+    -fx-base: red;
+}
+
+.center-column {
+    -fx-alignment: center;
+}
