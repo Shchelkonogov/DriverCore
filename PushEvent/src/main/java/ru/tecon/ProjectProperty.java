@@ -28,6 +28,7 @@ public class ProjectProperty {
     private static String serverURI;
     private static String serverPort;
     private static boolean checkRequestService = true;
+    private static int trafficLimit;
 
     /**
      * Метод выгружает конфигурацию из файла в себя
@@ -59,6 +60,7 @@ public class ProjectProperty {
 
             serverURI = prop.getProperty("serverURI");
             serverPort = prop.getProperty("serverPort");
+            trafficLimit = Integer.parseInt(prop.getProperty("trafficLimit"));
 
             if ((prop.getProperty("checkRequestService") != null) &&
                     (prop.getProperty("checkRequestService").equals("false"))) {
@@ -110,5 +112,9 @@ public class ProjectProperty {
 
     static Path getInstantConfigFile() {
         return instantConfigFile;
+    }
+
+    public static int getTrafficLimit() {
+        return trafficLimit;
     }
 }
