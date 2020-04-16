@@ -4,6 +4,7 @@ import com.jcraft.jsch.*;
 import ru.tecon.instantData.InstantDataTypes;
 import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.MonitorInputStream;
+import ru.tecon.traffic.Statistic;
 
 import javax.naming.NamingException;
 import java.io.BufferedReader;
@@ -170,8 +171,11 @@ public class ControllerConfig {
 
             StringBuilder sb = new StringBuilder();
 
+            Statistic st = EchoSocketServer.getStatistic(url);
+            st.updateOutputTraffic(2048);
+
             try (MonitorInputStream monitor = new MonitorInputStream(channel.getInputStream())) {
-                monitor.setStatistic(EchoSocketServer.getStatistic(url));
+                monitor.setStatistic(st);
 
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(monitor))) {
                     reader.lines().forEach(s -> {
