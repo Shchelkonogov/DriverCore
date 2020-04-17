@@ -5,9 +5,12 @@ import ru.tecon.beanInterface.LoadOPCLocal;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.model.DataModel;
 import ru.tecon.model.ValueModel;
+import ru.tecon.model.WebStatistic;
 
 import javax.annotation.Resource;
 import javax.ejb.*;
+import javax.json.bind.Jsonb;
+import javax.json.bind.JsonbBuilder;
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.*;
@@ -229,6 +232,14 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             "               where display_name like ?)) " +
             "and kind = 'AsyncRefresh' and is_success_execution is null";
 
+    /**
+     * SQL для определения имени объекта по имени сервера и ip адреса прибора
+     * первый параметр - имя сервера
+     * второй параметр - ip прибора
+     */
+    private static final String SQL_GET_OBJECT_NAME = "select obj_name from obj_object " +
+            "where obj_id = (select id from opc_object where server_name = ? and item_name like ? and subscribed = 1)";
+
     @Resource(name = "jdbc/DataSource")
     private DataSource ds;
 
@@ -407,6 +418,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                 } catch (SQLException e) {
                     // TODO Сделать проверку на существование записи и ничего не выводить если запись существует
                     LOG.warning("putConfig Запись уже существует " + item);
+                    LOG.warning(e.getMessage() + " " + e.getSQLState() + " " + e.getErrorCode());
                 }
             }
 
@@ -722,6 +734,44 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
         } catch (SQLException e) {
             LOG.log(Level.WARNING, "error when put failure message", e);
         }
+    }
+
+    @Override
+    public void requestStatistic() {
+        WebSocketServer.sendAll("requestStatistic");
+    }
+
+    @Override
+    @Asynchronous
+    public Future<Void> uploadStatistic(WebStatistic statistic) {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        Jsonb json = JsonbBuilder.create();
+        System.out.println(json.toJson(statistic));
+        WebSocketServer.sendAllClients(json.toJson(statistic));
+
+        return null;
+    }
+
+    @Override
+    public String loadObjectName(String serverName, String ip) {
+        try (Connection connect = ds.getConnection();
+            PreparedStatement stm = connect.prepareStatement(SQL_GET_OBJECT_NAME)) {
+            stm.setString(1, serverName);
+            stm.setString(2, "%" + ip + "%");
+
+            ResultSet res = stm.executeQuery();
+            if (res.next()) {
+                return res.getString(1);
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.WARNING, "error when load object name:", e);
+        }
+        return "";
     }
 
     /**
