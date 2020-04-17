@@ -6,6 +6,7 @@ import javax.websocket.server.ServerEndpoint;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -14,16 +15,22 @@ public class WebSocketServer {
 
     private static final Logger LOG = Logger.getLogger(WebSocketServer.class.getName());
     private static final Map<Session, String> SESSIONS = new ConcurrentHashMap<>();
+    private static final Set<Session> CLIENT_SESSIONS = ConcurrentHashMap.newKeySet();
 
     @OnOpen
     public void onOpen(@PathParam("serverName") String serverName, Session session) {
-        SESSIONS.put(session, serverName);
+        if (serverName.equals("client")) {
+            CLIENT_SESSIONS.add(session);
+        } else {
+            SESSIONS.put(session, serverName);
+        }
     }
 
     @OnClose
     public void onClose(Session session) {
-        LOG.info("close " + SESSIONS.get(session));
+        LOG.info("close server session: " + SESSIONS.get(session) + " or client session: " + session.getId());
         SESSIONS.remove(session);
+        CLIENT_SESSIONS.remove(session);
     }
 
     @OnMessage
@@ -39,7 +46,9 @@ public class WebSocketServer {
 
     @OnMessage
     public void onMessage(String message) {
-        LOG.info("onMessage: " + message);
+        if (!message.equals("ping message server")) {
+            LOG.info("onMessage: " + message);
+        }
     }
 
     /**
@@ -53,6 +62,28 @@ public class WebSocketServer {
             for (Map.Entry<Session, String> entry: SESSIONS.entrySet()) {
                 if (entry.getValue().equals(to) && entry.getKey().isOpen()) {
                     entry.getKey().getAsyncRemote().sendText(message);
+                }
+            }
+        }
+    }
+
+    public static void sendAll(String message) {
+        LOG.info("sendTo message: " + message);
+        synchronized (SESSIONS) {
+            for (Map.Entry<Session, String> entry: SESSIONS.entrySet()) {
+                if (entry.getKey().isOpen()) {
+                    entry.getKey().getAsyncRemote().sendText(message);
+                }
+            }
+        }
+    }
+
+    public static void sendAllClients(String message) {
+        LOG.info("sendTo message: " + message);
+        synchronized (CLIENT_SESSIONS) {
+            for (Session session: CLIENT_SESSIONS) {
+                if (session.isOpen()) {
+                    session.getAsyncRemote().sendText(message);
                 }
             }
         }
