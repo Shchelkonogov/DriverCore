@@ -1,6 +1,4 @@
 *.iml
 .idea/*
-resources/log/*
-resources/config
-resources/instantConfig
-log.*
+resources/*
+logs/*
