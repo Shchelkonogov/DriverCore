@@ -18,6 +18,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.Level;
+import java.util.logging.LogManager;
 import java.util.logging.Logger;
 
 /**
@@ -31,6 +32,7 @@ public class EchoSocketServer {
     private static final WebSocketClient webSocketClient = new WebSocketClient();
 
     private static ConcurrentMap<String, Statistic> statistic = new ConcurrentHashMap<>();
+
     private static ServerSocket serverSocket;
 
     private static ScheduledExecutorService service;
@@ -42,7 +44,10 @@ public class EchoSocketServer {
 
     public static void main(String[] args) {
         try {
+            LogManager.getLogManager().readConfiguration(EchoSocketServer.class.getResourceAsStream("/log.properties"));
             startService(args);
+        } catch (IOException e) {
+            log.log(Level.WARNING, "load logging config error:", e);
         } catch (MyServerStartException e) {
             log.log(Level.WARNING, "server start exception:", e);
         }
