@@ -145,11 +145,10 @@ public class InstantDataService {
             MonitorInputStream monitorIn = new MonitorInputStream(socket.getInputStream());
             monitorIn.setStatistic(st);
 
-            MonitorOutputStream monitorOut = new MonitorOutputStream(socket.getOutputStream());
-            monitorOut.setStatistic(st);
+            MonitorOutputStream out = new MonitorOutputStream(socket.getOutputStream());
+            out.setStatistic(st);
 
             DataInputStream in = new DataInputStream(new BufferedInputStream(monitorIn));
-            DataOutputStream out = new DataOutputStream(new BufferedOutputStream(monitorOut));
 
             // Реализую запрос на создание списка переменных
             ByteBuffer head = ByteBuffer.allocate(16 + size).order(ByteOrder.LITTLE_ENDIAN)
