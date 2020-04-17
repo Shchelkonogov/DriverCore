@@ -1,7 +1,6 @@
 package ru.tecon.controller;
 
 import javafx.beans.binding.Bindings;
-import javafx.beans.property.SimpleObjectProperty;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -10,12 +9,9 @@ import ru.tecon.traffic.Event;
 import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.Statistic;
 
-import java.time.format.DateTimeFormatter;
 import java.util.Random;
 
 public class RootLayoutController {
-
-    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
 
     private Event event = new Event() {
         @Override
@@ -42,6 +38,9 @@ public class RootLayoutController {
 
     @FXML
     private TableColumn<Statistic, String> ipColumn;
+
+    @FXML
+    private TableColumn<Statistic, String> objectNameColumn;
 
     @FXML
     private TableColumn<Statistic, String> inputTrafficColumn;
@@ -73,20 +72,15 @@ public class RootLayoutController {
     @FXML
     public void initialize() {
         ipColumn.setCellValueFactory(new PropertyValueFactory<>("ip"));
-
+        objectNameColumn.setCellValueFactory(new PropertyValueFactory<>("objectName"));
         inputTrafficColumn.setCellValueFactory(new PropertyValueFactory<>("inputTraffic"));
         outputTrafficColumn.setCellValueFactory(new PropertyValueFactory<>("outputTraffic"));
         trafficColumn.setCellValueFactory(new PropertyValueFactory<>("traffic"));
         monthTrafficColumn.setCellValueFactory(new PropertyValueFactory<>("monthTraffic"));
-
-        time1.setCellValueFactory(cellData -> new SimpleObjectProperty<>(
-                cellData.getValue().getTrafficStartTime() == null ? "" : cellData.getValue().getTrafficStartTime().format(FORMATTER)));
-        time2.setCellValueFactory(cellData -> new SimpleObjectProperty<>(
-                cellData.getValue().getSocketStartTime() == null ? "" : cellData.getValue().getSocketStartTime().format(FORMATTER)));
-
+        time1.setCellValueFactory(new PropertyValueFactory<>("trafficStartTimeString"));
+        time2.setCellValueFactory(new PropertyValueFactory<>("socketStartTimeString"));
         socketCountColumn.setCellValueFactory(new PropertyValueFactory<>("socketCount"));
-
-        block.setCellValueFactory(cellData -> new SimpleObjectProperty<>(cellData.getValue().isBlock() ? "Заблокировано" : "Свободно"));
+        block.setCellValueFactory(new PropertyValueFactory<>("blockToString"));
 
         tableView.setRowFactory(param -> {
             TableRow<Statistic> row = new TableRow<>();
@@ -113,6 +107,8 @@ public class RootLayoutController {
     private void onStartClick() {
         startButton.setDisable(true);
 
+        LogStage.show();
+
         Thread serviceThread = new Thread(() -> {
             try {
                 stopButton.setDisable(false);
@@ -125,9 +121,8 @@ public class RootLayoutController {
         });
         serviceThread.setDaemon(true);
         serviceThread.start();
-        LogStage.show();
 
-//        testEvent();
+        testEvent(new Random().nextInt(10));
     }
 
     @FXML
@@ -140,38 +135,23 @@ public class RootLayoutController {
         stopButton.setDisable(true);
     }
 
-    private void testEvent() {
-        Statistic s = new Statistic("255.255.255.255", event);
-        Statistic s1 = new Statistic("10.10.10.2", event);
-
-        Thread t1 = new Thread(() -> {
-            Random r = new Random();
-            while (true) {
-                s.updateInputTraffic(10);
-                s.updateOutputTraffic(5);
-                try {
-                    Thread.sleep(r.nextInt(1000));
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+    private void testEvent(int count) {
+        for (int i = 0; i < count; i++) {
+            Statistic st = new Statistic("255.255.255." + i, event, false);
+            Thread thread = new Thread(() -> {
+                Random r = new Random();
+                while (true) {
+                    st.updateInputTraffic(r.nextInt(100));
+                    st.updateOutputTraffic(r.nextInt(100));
+                    try {
+                        Thread.sleep(r.nextInt(1000));
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
                 }
-            }
-        });
-        t1.setDaemon(true);
-        t1.start();
-
-        Thread t2 = new Thread(() -> {
-            Random r = new Random();
-            while (true) {
-                s1.updateInputTraffic(1);
-                s1.updateOutputTraffic(2);
-                try {
-                    Thread.sleep(r.nextInt(1000));
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        t2.setDaemon(true);
-        t2.start();
+            });
+            thread.setDaemon(true);
+            thread.start();
+        }
     }
 }
