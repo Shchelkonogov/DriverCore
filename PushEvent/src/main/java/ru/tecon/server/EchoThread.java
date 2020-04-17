@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class EchoThread extends Thread {
@@ -31,6 +32,8 @@ public class EchoThread extends Thread {
     private String objectName = null;
     private LoadOPCRemote opc;
 
+    private Statistic statistic;
+
     private byte[] markV2 = new byte[0];
     private int protocolVersion = 2;
 
@@ -41,10 +44,10 @@ public class EchoThread extends Thread {
 
     public void run() {
         DataInputStream in;
-        DataOutputStream out;
+        MonitorOutputStream out;
 
         try {
-            Statistic statistic = EchoSocketServer.getStatistic(socket.getInetAddress().getHostAddress());
+            statistic = EchoSocketServer.getStatistic(socket.getInetAddress().getHostAddress());
             statistic.setSocket(socket);
             statistic.setThread(this);
 
@@ -52,9 +55,8 @@ public class EchoThread extends Thread {
             monitorIn.setStatistic(statistic);
             in = new DataInputStream(new BufferedInputStream(monitorIn));
 
-            MonitorOutputStream monitorOut = new MonitorOutputStream(socket.getOutputStream());
-            monitorOut.setStatistic(statistic);
-            out = new DataOutputStream(new BufferedOutputStream(monitorOut));
+            out = new MonitorOutputStream(socket.getOutputStream());
+            out.setStatistic(statistic);
         } catch (IOException e) {
             LOG.warning("run Error create data streams Message: " + e.getMessage()
                     + " Thread: " + this.getId() + " ObjectName: " + objectName);
@@ -73,6 +75,8 @@ public class EchoThread extends Thread {
                     data = new byte[size];
 
                     if (size == 0) {
+                        statistic.serverErrorBlock();
+
                         socket.close();
                         LOG.warning("run Error read message Socket close! Thread: " + this.getId() +
                                 " ObjectName: " + objectName);
@@ -92,6 +96,13 @@ public class EchoThread extends Thread {
                             break;
                         }
                         case 3: {
+                            if (!opc.checkObject(serverName + '_' + objectName, serverName)) {
+                                LOG.info("check object return false Thread: " + this.getId() + " objectName: " + objectName);
+                                statistic.linkedBlock();
+                                socket.close();
+                                return;
+                            }
+
                             ArrayList<DataModel> dataModels = opc.loadObjectParameters(serverName + '_' + objectName, serverName);
                             Collections.sort(dataModels);
 
@@ -105,6 +116,8 @@ public class EchoThread extends Thread {
                                         messageConfirmSize = 2;
                                         messagesCount = parse(data, result, 2, protocolVersion);
                                     } catch (Exception e) {
+                                        statistic.serverErrorBlock();
+
                                         socket.close();
                                         LOG.warning("run Parse version 1 exception. Socket close! " + e.getMessage() +
                                                 " Data: " + Arrays.toString(data) +
@@ -122,6 +135,8 @@ public class EchoThread extends Thread {
 
                                         messagesCount = parse(data, result, 4 + markSize, protocolVersion);
                                     } catch (Exception e) {
+                                        statistic.serverErrorBlock();
+
                                         socket.close();
                                         LOG.warning("run Parse version 2 exception. Socket close! " + e.getMessage() +
                                                 " Data: " + Arrays.toString(data) +
@@ -130,6 +145,8 @@ public class EchoThread extends Thread {
                                     }
                                     break;
                                 default:
+                                    statistic.serverErrorBlock();
+
                                     socket.close();
                                     LOG.warning("run Unknown protocolVersion. Socket close! Data: " + Arrays.toString(data) +
                                             " Thread: " + this.getId() + " ObjectName: " + objectName);
@@ -195,6 +212,8 @@ public class EchoThread extends Thread {
                             break;
                         }
                         default: {
+                            statistic.serverErrorBlock();
+
                             socket.close();
                             LOG.warning("run Unknown packageType. Socket close! Data: " + Arrays.toString(data) +
                                     " Thread: " + this.getId() + " ObjectName: " + objectName);
@@ -202,6 +221,8 @@ public class EchoThread extends Thread {
                         }
                     }
                 } else {
+                    statistic.serverErrorBlock();
+
                     socket.close();
                     LOG.warning("run Can`t read head of message Socket close! Thread: " + this.getId()
                             + " ObjectName: " + objectName);
@@ -224,7 +245,7 @@ public class EchoThread extends Thread {
      * @param out поток для ответа
      * @throws IOException если произошла ошибка
      */
-    private void identify(byte[] data, DataOutputStream out) throws MySocketException, IOException {
+    private void identify(byte[] data, OutputStream out) throws MySocketException, IOException {
         String version = Integer.toBinaryString(data[1] & 0xff);
 
         switch (version) {
@@ -241,6 +262,9 @@ public class EchoThread extends Thread {
             LOG.warning("identify duration error Thread: " + this.getId() + " objectName: " + objectName);
             out.write(getIdentificationFailureMessage());
             out.flush();
+
+            statistic.serverErrorBlock();
+
             socket.close();
             throw new MySocketException("Duration error");
         }
@@ -269,6 +293,9 @@ public class EchoThread extends Thread {
                 LOG.info("identify Check object return false Thread: " + this.getId() + " objectName: " + objectName);
                 out.write(getIdentificationFailureMessage());
                 out.flush();
+
+                statistic.linkedBlock();
+
                 socket.close();
                 throw new MySocketException("identify failure");
             }
@@ -277,6 +304,9 @@ public class EchoThread extends Thread {
                     " Thread: " + this.getId() + " objectName: " + objectName);
             out.write(getIdentificationFailureMessage());
             out.flush();
+
+            statistic.serverErrorBlock();
+
             socket.close();
             throw new MySocketException("identify failure");
         }
@@ -325,11 +355,9 @@ public class EchoThread extends Thread {
         return response;
     }
 
-    private static int parse(byte[] data, List<ParseDataModel> parseDataModels, int startIndex, int protocolVersion) throws Exception {
+    private int parse(byte[] data, List<ParseDataModel> parseDataModels, int startIndex, int protocolVersion) throws Exception {
         List<String> result = new ArrayList<>();
         List<Object> parseData;
-
-        System.out.println("data length: " + data.length);
 
         int increment;
         int messagesCount;
@@ -372,7 +400,7 @@ public class EchoThread extends Thread {
                 int bufferNumber = data[i + 8 + increment] & 0xff;
                 result.add("buffer number: " + bufferNumber);
 
-                int eventCode = ((data[i + 9 + increment] & 0xff) << 8) | ((data[i + 10 + increment] & 0xff) << 8) |
+                int eventCode = ((data[i + 9 + increment] & 0xff) << 24) | ((data[i + 10 + increment] & 0xff) << 16) |
                         ((data[i + 11 + increment] & 0xff) << 8) | (data[i + 12 + increment] & 0xff);
                 result.add("event code: " + eventCode);
 
@@ -513,13 +541,15 @@ public class EchoThread extends Thread {
                 repeatCount++;
             }
         } catch (IndexOutOfBoundsException e) {
-            System.out.println("IndexOutOfBoundsException " + e.getMessage());
+            LOG.log(Level.WARNING, "IndexOutOfBoundsException:", e);
         }
 
-        System.out.println("repeatCount " + repeatCount);
+        String path = ProjectProperty.getLogFolder().toAbsolutePath().toString() + "/" + socket.getInetAddress().getHostAddress();
+        if (!Files.exists(Paths.get(path))) {
+            Files.createDirectory(Paths.get(path));
+        }
 
-        Files.write(Paths.get(ProjectProperty.getLogFolder().toAbsolutePath().toString() + "/" +
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS")) + ".txt"), result);
+        Files.write(Paths.get(path + "/" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS")) + ".txt"), result);
 
         return repeatCount;
     }
