@@ -1,6 +1,7 @@
 package ru.tecon.beanInterface;
 
 import ru.tecon.model.DataModel;
+import ru.tecon.model.WebStatistic;
 
 import javax.ejb.Remote;
 import java.util.ArrayList;
@@ -122,4 +123,23 @@ public interface LoadOPCRemote {
      * @param message сообщение
      */
     void errorExecuteAsyncRefreshCommand(String path, String message);
+
+    /**
+     * Метод на запрос статистики от подключенных серверов
+     */
+    void requestStatistic();
+
+    /**
+     * Метод выгружает на сервер статистику
+     * @param statistic статистика
+     */
+    Future<Void> uploadStatistic(WebStatistic statistic);
+
+    /**
+     * Метод определяет возвращает имя объекта в системе по имени сервера и ip прибора
+     * @param serverName имя сервера
+     * @param ip ip прибора
+     * @return имя объекта
+     */
+    String loadObjectName(String serverName, String ip);
 }
