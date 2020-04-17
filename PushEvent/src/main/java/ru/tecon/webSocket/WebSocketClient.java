@@ -5,11 +5,15 @@ import ru.tecon.ProjectProperty;
 import ru.tecon.Utils;
 import ru.tecon.exception.MyServerStartException;
 import ru.tecon.instantData.InstantDataService;
+import ru.tecon.server.EchoSocketServer;
+import ru.tecon.traffic.Statistic;
 
+import javax.naming.NamingException;
 import javax.websocket.*;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -33,12 +37,31 @@ public class WebSocketClient {
 
     @OnMessage
     public void onMessage(String message) {
-        switch (message.substring(0, message.indexOf(" "))) {
+        String command;
+        String url = "";
+
+        if (message.contains(" ")) {
+            command = message.split(" ")[0];
+            url = message.split(" ")[1];
+        } else {
+            command = message;
+        }
+
+        switch (command) {
             case "loadConfig":
-                ControllerConfig.uploadConfig(message.substring(message.indexOf(" ") + 1));
+                ControllerConfig.uploadConfig(url);
                 break;
             case "loadInstantData":
-                InstantDataService.uploadInstantData(message.substring(message.indexOf(" ") + 1));
+                InstantDataService.uploadInstantData(url);
+                break;
+            case "requestStatistic":
+                try {
+                    for (Map.Entry<String, Statistic> entry: EchoSocketServer.getStatistic().entrySet()) {
+                        Utils.loadRMI().uploadStatistic(entry.getValue().getWebStatistic());
+                    }
+                } catch (NamingException e) {
+                    log.log(Level.WARNING, "error load RMI", e);
+                }
                 break;
         }
     }
