@@ -24,7 +24,7 @@ public class MonitorOutputStream extends FilterOutputStream {
     @Override
     public void write(byte[] b) throws IOException {
         out.write(b);
-        statistic.updateOutputTraffic(b.length);
+        statistic.updateOutputTraffic(((int) Math.ceil(b.length / 1024d)) * 1024);
     }
 
     @Override

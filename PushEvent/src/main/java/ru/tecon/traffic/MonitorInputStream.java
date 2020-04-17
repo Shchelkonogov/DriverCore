@@ -24,14 +24,18 @@ public class MonitorInputStream extends FilterInputStream {
     @Override
     public int read() throws IOException {
         int c = in.read();
-        statistic.updateInputTraffic(c);
+        if (c > 0) {
+            statistic.updateInputTraffic(c);
+        }
         return c;
     }
 
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         int nRead = in.read(b, off, len);
-        statistic.updateInputTraffic(nRead);
+        if (nRead > 0) {
+            statistic.updateInputTraffic(((int) Math.ceil(nRead / 1024d)) * 1024);
+        }
         return nRead;
     }
 
