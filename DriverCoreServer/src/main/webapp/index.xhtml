@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="http://xmlns.jcp.org/jsf/html"
+      xmlns:ui="http://xmlns.jcp.org/jsf/facelets"
+      xmlns:f="http://xmlns.jcp.org/jsf/core"
+      xmlns:p="http://primefaces.org/ui">
+<h:head>
+    <title>Статистика серверов MFK1500</title>
+    <h:outputStylesheet name="style.css" library="css" />
+    <h:outputScript name="script.js" library="js" />
+</h:head>
+<h:body style="margin: 0;">
+    <h:form>
+        <p:remoteCommand name="update" update="tableForm" action="#{statisticBean.update}" />
+    </h:form>
+
+    <h:form id="tableForm" style="height: calc(100% - 5px); margin: 5px;">
+        <p:dataTable id="table" emptyMessage="Данных нет" var="rowData" value="#{statisticBean.tableData}"
+                     scrollable="true" scrollHeight="100%">
+            <p:columnGroup type="header">
+                <p:row>
+                    <p:column rowspan="2" headerText="имя сервера" width="100" />
+                    <p:column rowspan="2" headerText="ip адрес" width="100" />
+                    <p:column rowspan="2" headerText="имя объекта" width="100" />
+                    <p:column colspan="2" headerText="сокет" width="230" />
+                    <p:column rowspan="2" headerText="статус" width="120" />
+                    <p:column colspan="5" headerText="трафик" width="430"/>
+                </p:row>
+                <p:row>
+                    <p:column headerText="дата открытия" width="150" />
+                    <p:column headerText="кол-во" width="80" />
+                    <p:column headerText="начало счета" width="150" />
+                    <p:column headerText="входящий" width="100" />
+                    <p:column headerText="исходящий" width="100" />
+                    <p:column headerText="общий суточный" width="140" />
+                    <p:column headerText="общий месячный" width="140" />
+                </p:row>
+            </p:columnGroup>
+
+            <p:column>
+                <h:outputText value="#{rowData.serverName}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.ip}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.objectName}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.socketTime}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.socketCount}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.status}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.trafficTime}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.trafficIn}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.trafficOut}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.trafficDay}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.trafficMonth}" />
+            </p:column>
+        </p:dataTable>
+    </h:form>
+</h:body>
+</html>

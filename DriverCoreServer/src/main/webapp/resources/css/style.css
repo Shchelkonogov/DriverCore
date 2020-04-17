@@ -1,0 +1,9 @@
+html, body {
+    height: calc(100% - 6px);
+    margin: 1px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
