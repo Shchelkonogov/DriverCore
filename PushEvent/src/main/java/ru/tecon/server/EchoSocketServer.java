@@ -90,6 +90,8 @@ public class EchoSocketServer {
                     if (LocalDate.now().getDayOfMonth() == 1) {
                         st.clearMonthTraffic();
                     }
+                    st.setBlock(false);
+                    st.updateObjectName();
                 }
         ), midnight, TimeUnit.DAYS.toMinutes(1), TimeUnit.MINUTES);
 
@@ -164,6 +166,10 @@ public class EchoSocketServer {
     public static boolean isBlocked(String ip) {
         Statistic st = statistic.get(ip);
         return ((st != null) && st.isBlock());
+    }
+
+    public static ConcurrentMap<String, Statistic> getStatistic() {
+        return statistic;
     }
 
     public static void setEvent(Event event) {
