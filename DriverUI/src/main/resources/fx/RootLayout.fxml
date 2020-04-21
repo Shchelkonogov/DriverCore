@@ -7,7 +7,7 @@
 <?import javafx.scene.control.TableView?>
 <?import javafx.scene.layout.AnchorPane?>
 
-<AnchorPane prefHeight="400.0" prefWidth="1111.0" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="ru.tecon.controller.RootLayoutController">
+<AnchorPane prefHeight="400.0" prefWidth="1300.0" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="ru.tecon.controller.RootLayoutController">
    <children>
       <TabPane layoutX="52.0" layoutY="156.0" prefHeight="244.0" prefWidth="600.0" tabClosingPolicy="UNAVAILABLE" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
         <tabs>
@@ -19,20 +19,15 @@
                           <columns>
                             <TableColumn fx:id="ipColumn" minWidth="120.0" prefWidth="120.0" text="ip адрес" />
                               <TableColumn fx:id="objectNameColumn" minWidth="120.0" prefWidth="120.0" styleClass="center-column" text="имя объекта" />
-                              <TableColumn minWidth="169.0" prefWidth="169.0" text="сокет">
-                                 <columns>
-                                    <TableColumn fx:id="time2" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="дата открытия" />
-                                    <TableColumn fx:id="socketCountColumn" minWidth="80.0" styleClass="center-column" text="кол-во" />
-                                 </columns>
-                              </TableColumn>
+                              <TableColumn fx:id="socketCountColumn" minWidth="70.0" prefWidth="70.0" styleClass="center-column" text="кол-во" />
                               <TableColumn fx:id="block" minWidth="120.0" prefWidth="120.0" styleClass="center-column" text="статус" />
+                              <TableColumn fx:id="lastRequestTimeColumn" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="последняя связь" />
                               <TableColumn prefWidth="75.0" text="трафик">
                                  <columns>
-                                    <TableColumn fx:id="time1" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="начало счета" />
-                                    <TableColumn fx:id="inputTrafficColumn" minWidth="100.0" prefWidth="100.0" styleClass="center-column" text="входящий" />
-                                    <TableColumn fx:id="outputTrafficColumn" minWidth="100.0" prefWidth="100.0" styleClass="center-column" text="исходящий" />
-                                    <TableColumn fx:id="trafficColumn" minWidth="140.0" prefWidth="140.0" styleClass="center-column" text="общий суточный" />
-                                    <TableColumn fx:id="monthTrafficColumn" minWidth="140.0" prefWidth="140.0" styleClass="center-column" text="общий месячный" />
+                                    <TableColumn fx:id="inputTrafficColumn" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="входящий" />
+                                    <TableColumn fx:id="outputTrafficColumn" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="исходящий" />
+                                    <TableColumn fx:id="trafficColumn" minWidth="200.0" prefWidth="200.0" styleClass="center-column" text="общий суточный" />
+                                    <TableColumn fx:id="monthTrafficColumn" minWidth="200.0" prefWidth="200.0" styleClass="center-column" text="общий месячный" />
                                  </columns>
                               </TableColumn>
                           </columns>

@@ -9,8 +9,6 @@ import ru.tecon.traffic.Event;
 import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.Statistic;
 
-import java.util.Random;
-
 public class RootLayoutController {
 
     private Event event = new Event() {
@@ -58,10 +56,7 @@ public class RootLayoutController {
     private TableColumn<Statistic, Integer> socketCountColumn;
 
     @FXML
-    private TableColumn<Statistic, String> time1;
-
-    @FXML
-    private TableColumn<Statistic, String> time2;
+    private TableColumn<Statistic, String> lastRequestTimeColumn;
 
     @FXML
     private TableColumn<Statistic, String> block;
@@ -77,8 +72,7 @@ public class RootLayoutController {
         outputTrafficColumn.setCellValueFactory(new PropertyValueFactory<>("outputTraffic"));
         trafficColumn.setCellValueFactory(new PropertyValueFactory<>("traffic"));
         monthTrafficColumn.setCellValueFactory(new PropertyValueFactory<>("monthTraffic"));
-        time1.setCellValueFactory(new PropertyValueFactory<>("trafficStartTimeString"));
-        time2.setCellValueFactory(new PropertyValueFactory<>("socketStartTimeString"));
+        lastRequestTimeColumn.setCellValueFactory(new PropertyValueFactory<>("lastRequestTime"));
         socketCountColumn.setCellValueFactory(new PropertyValueFactory<>("socketCount"));
         block.setCellValueFactory(new PropertyValueFactory<>("blockToString"));
 
@@ -137,23 +131,23 @@ public class RootLayoutController {
         stopButton.setDisable(true);
     }
 
-    private void testEvent(int count) {
-        for (int i = 0; i < count; i++) {
-            Statistic st = new Statistic("255.255.255." + i, event, false);
-            Thread thread = new Thread(() -> {
-                Random r = new Random();
-                while (true) {
-                    st.updateInputTraffic(r.nextInt(100));
-                    st.updateOutputTraffic(r.nextInt(100));
-                    try {
-                        Thread.sleep(r.nextInt(1000));
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-            });
-            thread.setDaemon(true);
-            thread.start();
-        }
-    }
+//    private void testEvent(int count) {
+//        for (int i = 0; i < count; i++) {
+//            Statistic st = new Statistic("255.255.255." + i, event, false);
+//            Thread thread = new Thread(() -> {
+//                Random r = new Random();
+//                while (true) {
+//                    st.updateInputTraffic(r.nextInt(100));
+//                    st.updateOutputTraffic(r.nextInt(100));
+//                    try {
+//                        Thread.sleep(r.nextInt(1000));
+//                    } catch (InterruptedException e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//            });
+//            thread.setDaemon(true);
+//            thread.start();
+//        }
+//    }
 }

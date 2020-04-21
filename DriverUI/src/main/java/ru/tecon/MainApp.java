@@ -24,12 +24,12 @@ public class MainApp extends Application {
         Parent root = FXMLLoader.load(getClass().getResource("/fx/RootLayout.fxml"));
 
         primaryStage.setTitle("Сервер MFK1500");
-        primaryStage.setScene(new Scene(root, 1250, 600));
+        primaryStage.setScene(new Scene(root, 1300, 600));
 
-        primaryStage.setWidth(1250);
+        primaryStage.setWidth(1300);
         primaryStage.setHeight(600);
 
-        primaryStage.setMinWidth(1250);
+        primaryStage.setMinWidth(1300);
         primaryStage.setMinHeight(600);
 
         primaryStage.show();
