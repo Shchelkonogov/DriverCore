@@ -3,10 +3,10 @@
                   xsi:schemaLocation="http://xmlns.oracle.com/weblogic/weblogic-web-app http://xmlns.oracle.com/weblogic/weblogic-web-app/1.9/weblogic-web-app.xsd">
     <resource-description>
         <res-ref-name>jdbc/DataSource</res-ref-name>
-        <jndi-name>jdbc/OracleDataSourceTecon</jndi-name>
+        <jndi-name>jdbc/OracleDataSource</jndi-name>
     </resource-description>
     <resource-description>
         <res-ref-name>jdbc/DataSourceUpload</res-ref-name>
-        <jndi-name>jdbc/OracleDataSourceFilTecon</jndi-name>
+        <jndi-name>jdbc/OracleDataSourceFil5</jndi-name>
     </resource-description>
 </weblogic-web-app>
