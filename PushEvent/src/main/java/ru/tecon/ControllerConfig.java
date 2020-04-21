@@ -172,7 +172,7 @@ public class ControllerConfig {
             StringBuilder sb = new StringBuilder();
 
             Statistic st = EchoSocketServer.getStatistic(url);
-            st.updateOutputTraffic(2048);
+            st.updateOutputTraffic(100);
 
             try (MonitorInputStream monitor = new MonitorInputStream(channel.getInputStream())) {
                 monitor.setStatistic(st);
