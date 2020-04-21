@@ -49,7 +49,6 @@ public class EchoThread extends Thread {
         try {
             statistic = EchoSocketServer.getStatistic(socket.getInetAddress().getHostAddress());
             statistic.setSocket(socket);
-            statistic.setThread(this);
 
             MonitorInputStream monitorIn = new MonitorInputStream(socket.getInputStream());
             monitorIn.setStatistic(statistic);
