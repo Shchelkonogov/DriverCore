@@ -107,6 +107,8 @@ public class RootLayoutController {
     private void onStartClick() {
         startButton.setDisable(true);
 
+        tableView.getItems().clear();
+
         LogStage.show();
 
         Thread serviceThread = new Thread(() -> {
@@ -122,7 +124,7 @@ public class RootLayoutController {
         serviceThread.setDaemon(true);
         serviceThread.start();
 
-        testEvent(new Random().nextInt(10));
+//        testEvent(new Random().nextInt(10));
     }
 
     @FXML
