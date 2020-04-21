@@ -94,6 +94,10 @@ public class ProjectProperty {
         return logFolder;
     }
 
+    public static String getLogFolderString() {
+        return logFolder.toAbsolutePath().toString();
+    }
+
     public static String getServerURI() {
         return serverURI;
     }
