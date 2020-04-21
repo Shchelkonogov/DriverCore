@@ -25,7 +25,7 @@ public class MonitorInputStream extends FilterInputStream {
     public int read() throws IOException {
         int c = in.read();
         if (c > 0) {
-            statistic.updateInputTraffic(c);
+            statistic.updateInputTraffic(1);
         }
         return c;
     }
@@ -34,7 +34,7 @@ public class MonitorInputStream extends FilterInputStream {
     public int read(byte[] b, int off, int len) throws IOException {
         int nRead = in.read(b, off, len);
         if (nRead > 0) {
-            statistic.updateInputTraffic(((int) Math.ceil(nRead / 1024d)) * 1024);
+            statistic.updateInputTraffic(nRead);
         }
         return nRead;
     }
