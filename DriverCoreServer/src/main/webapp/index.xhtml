@@ -24,18 +24,16 @@
                     <p:column rowspan="2" headerText="имя сервера" width="100" />
                     <p:column rowspan="2" headerText="ip адрес" width="100" />
                     <p:column rowspan="2" headerText="имя объекта" width="100" />
-                    <p:column colspan="2" headerText="сокет" width="230" />
+                    <p:column rowspan="2" headerText="кол-во" width="70" />
                     <p:column rowspan="2" headerText="статус" width="120" />
-                    <p:column colspan="5" headerText="трафик" width="430"/>
+                    <p:column rowspan="2" headerText="последняя связь" width="150" />
+                    <p:column colspan="4" headerText="трафик" width="540"/>
                 </p:row>
                 <p:row>
-                    <p:column headerText="дата открытия" width="150" />
-                    <p:column headerText="кол-во" width="80" />
-                    <p:column headerText="начало счета" width="150" />
-                    <p:column headerText="входящий" width="100" />
-                    <p:column headerText="исходящий" width="100" />
-                    <p:column headerText="общий суточный" width="140" />
-                    <p:column headerText="общий месячный" width="140" />
+                    <p:column headerText="входящий" width="120" />
+                    <p:column headerText="исходящий" width="120" />
+                    <p:column headerText="общий суточный" width="150" />
+                    <p:column headerText="общий месячный" width="150" />
                 </p:row>
             </p:columnGroup>
 
@@ -52,10 +50,6 @@
             </p:column>
 
             <p:column>
-                <h:outputText value="#{rowData.socketTime}" />
-            </p:column>
-
-            <p:column>
                 <h:outputText value="#{rowData.socketCount}" />
             </p:column>
 
@@ -64,7 +58,7 @@
             </p:column>
 
             <p:column>
-                <h:outputText value="#{rowData.trafficTime}" />
+                <h:outputText value="#{rowData.lastRequestTime}" />
             </p:column>
 
             <p:column>

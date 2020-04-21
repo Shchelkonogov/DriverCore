@@ -37,27 +37,23 @@ public class StatisticMB implements Serializable {
     public void update() {
         String json = FacesContext.getCurrentInstance().getExternalContext().getRequestParameterMap().get("json");
 
-        System.out.println(json);
-
         JsonReader jsonReader = Json.createReader(new StringReader(json));
         JsonObject jsonObject = jsonReader.readObject();
 
         WebStatistic st = new WebStatistic(jsonObject.getString("serverName"), jsonObject.getString("ip"),
-                jsonObject.getString("objectName"), jsonObject.getString("socketTime"),
-                jsonObject.getString("socketCount"), jsonObject.getString("status"),
-                jsonObject.getString("trafficTime"), jsonObject.getString("trafficIn"),
-                jsonObject.getString("trafficOut"), jsonObject.getString("trafficDay"),
-                jsonObject.getString("trafficMonth"));
+                jsonObject.getString("objectName"), jsonObject.getString("socketCount"),
+                jsonObject.getString("status"), jsonObject.getString("lastRequestTime"),
+                jsonObject.getString("trafficIn"), jsonObject.getString("trafficOut"),
+                jsonObject.getString("trafficDay"), jsonObject.getString("trafficMonth"));
 
         boolean contains = false;
 
         for (WebStatistic tableDatum : tableData) {
             if (tableDatum.getServerName().equals(st.getServerName()) &&
                     tableDatum.getIp().equals(st.getIp())) {
-                tableDatum.setSocketTime(st.getSocketTime());
                 tableDatum.setSocketCount(st.getSocketCount());
                 tableDatum.setStatus(st.getStatus());
-                tableDatum.setTrafficTime(st.getTrafficTime());
+                tableDatum.setLastRequestTime(st.getLastRequestTime());
                 tableDatum.setTrafficIn(st.getTrafficIn());
                 tableDatum.setTrafficOut(st.getTrafficOut());
                 tableDatum.setTrafficDay(st.getTrafficDay());

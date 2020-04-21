@@ -8,25 +8,23 @@ public class WebStatistic implements Serializable {
     private String serverName;
     private String ip;
     private String objectName;
-    private String socketTime;
     private String socketCount;
     private String status;
-    private String trafficTime;
+    private String lastRequestTime;
     private String trafficIn;
     private String trafficOut;
     private String trafficDay;
     private String trafficMonth;
 
-    public WebStatistic(String serverName, String ip, String objectName, String socketTime, String socketCount,
-                        String status, String trafficTime, String trafficIn, String trafficOut, String trafficDay,
+    public WebStatistic(String serverName, String ip, String objectName, String socketCount,
+                        String status, String lastRequestTime, String trafficIn, String trafficOut, String trafficDay,
                         String trafficMonth) {
         this.serverName = serverName;
         this.ip = ip;
         this.objectName = objectName;
-        this.socketTime = socketTime;
         this.socketCount = socketCount;
         this.status = status;
-        this.trafficTime = trafficTime;
+        this.lastRequestTime = lastRequestTime;
         this.trafficIn = trafficIn;
         this.trafficOut = trafficOut;
         this.trafficDay = trafficDay;
@@ -45,10 +43,6 @@ public class WebStatistic implements Serializable {
         return ip;
     }
 
-    public String getSocketTime() {
-        return socketTime;
-    }
-
     public String getSocketCount() {
         return socketCount;
     }
@@ -57,8 +51,8 @@ public class WebStatistic implements Serializable {
         return status;
     }
 
-    public String getTrafficTime() {
-        return trafficTime;
+    public String getLastRequestTime() {
+        return lastRequestTime;
     }
 
     public String getTrafficIn() {
@@ -77,10 +71,6 @@ public class WebStatistic implements Serializable {
         return trafficMonth;
     }
 
-    public void setSocketTime(String socketTime) {
-        this.socketTime = socketTime;
-    }
-
     public void setSocketCount(String socketCount) {
         this.socketCount = socketCount;
     }
@@ -89,8 +79,8 @@ public class WebStatistic implements Serializable {
         this.status = status;
     }
 
-    public void setTrafficTime(String trafficTime) {
-        this.trafficTime = trafficTime;
+    public void setLastRequestTime(String lastRequestTime) {
+        this.lastRequestTime = lastRequestTime;
     }
 
     public void setTrafficIn(String trafficIn) {
@@ -123,10 +113,9 @@ public class WebStatistic implements Serializable {
                 .add("serverName='" + serverName + "'")
                 .add("ip='" + ip + "'")
                 .add("objectName='" + objectName + "'")
-                .add("socketTime='" + socketTime + "'")
                 .add("socketCount='" + socketCount + "'")
                 .add("status='" + status + "'")
-                .add("trafficTime='" + trafficTime + "'")
+                .add("lastRequestTime='" + lastRequestTime + "'")
                 .add("trafficIn='" + trafficIn + "'")
                 .add("trafficOut='" + trafficOut + "'")
                 .add("trafficDay='" + trafficDay + "'")
