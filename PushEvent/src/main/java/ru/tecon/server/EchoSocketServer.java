@@ -9,9 +9,12 @@ import ru.tecon.traffic.Statistic;
 import ru.tecon.instantData.InstantDataService;
 import ru.tecon.webSocket.WebSocketClient;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -69,6 +72,27 @@ public class EchoSocketServer {
         log.info("controller config load");
         System.out.println("Конфигурация контроллера загружена");
 
+        if (Files.exists(Paths.get(ProjectProperty.getLogFolderString() + "/statisticSer"))) {
+            File[] files = new File(ProjectProperty.getLogFolderString() + "/statisticSer").listFiles();
+            if (files != null) {
+                for (File fileEntry : files) {
+                    if (!fileEntry.isDirectory()) {
+                        String ip = fileEntry.getName().replaceFirst("[.][^.]+$", "").replaceAll("_", ".");
+                        Statistic st = new Statistic(ip, event);
+                        st.deserialize(fileEntry.toPath().toAbsolutePath().toString());
+                        statistic.put(ip, st);
+                        try {
+                            Files.delete(fileEntry.toPath());
+                        } catch (IOException e) {
+                            log.log(Level.WARNING, "file delete error", e);
+                        }
+                    }
+                }
+            }
+        }
+        log.info("controller config load");
+        System.out.println("Конфигурация контроллера загружена");
+
         // Запускаем webSocketClient
         webSocketClient.connectToWebSocketServer();
         log.info("Web socket client start");
@@ -86,12 +110,13 @@ public class EchoSocketServer {
         service = Executors.newSingleThreadScheduledExecutor();
         future = service.scheduleAtFixedRate(() ->
                 statistic.forEach((s, st) -> {
+                    st.clearSocketCount();
                     st.clearDayTraffic();
                     if (LocalDate.now().getDayOfMonth() == 1) {
                         st.clearMonthTraffic();
                     }
-                    st.setBlock(false);
                     st.updateObjectName();
+                    st.setBlock(false);
                 }
         ), midnight, TimeUnit.DAYS.toMinutes(1), TimeUnit.MINUTES);
 
@@ -148,7 +173,11 @@ public class EchoSocketServer {
         try {
             if (serverSocket != null) {
                 serverSocket.close();
-                statistic.forEach((k, v) -> v.close());
+                statistic.forEach((k, v) -> {
+                    v.close();
+                    v.serialize(ProjectProperty.getLogFolderString());
+                });
+                statistic.clear();
             }
         } catch (IOException e) {
             log.log(Level.WARNING, "error with close sockets:", e);
