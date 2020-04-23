@@ -7,8 +7,6 @@ import ru.tecon.model.WebStatistic;
 import javax.naming.NamingException;
 import java.io.*;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -190,14 +188,14 @@ public class Statistic {
     public String getBlockToString() {
         if (isBlock()) {
             if (statisticSer.isLinkedBlock()) {
-                return "Не слинковано";
+                return "не слинковано";
             }
             if (statisticSer.isServerErrorBlock()) {
-                return "Ошибка сервера";
+                return "ошибка сервера";
             }
-            return "Заблокировано";
+            return "заблокировано";
         } else {
-            return "Свободно";
+            return "свободно";
         }
     }
 
