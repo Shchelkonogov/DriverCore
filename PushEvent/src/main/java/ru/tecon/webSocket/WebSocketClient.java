@@ -54,6 +54,12 @@ public class WebSocketClient {
             case "loadInstantData":
                 InstantDataService.uploadInstantData(url);
                 break;
+            case "block":
+                EchoSocketServer.getStatistic().get(url).setBlock(true);
+                break;
+            case "unblock":
+                EchoSocketServer.getStatistic().get(url).setBlock(false);
+                break;
             case "requestStatistic":
                 try {
                     for (Map.Entry<String, Statistic> entry: EchoSocketServer.getStatistic().entrySet()) {

@@ -774,6 +774,15 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
         return "";
     }
 
+    @Override
+    public void changeStatus(String serverName, String ip, boolean status) {
+        if (status) {
+            WebSocketServer.sendTo(serverName, "block " + ip);
+        } else {
+            WebSocketServer.sendTo(serverName, "unblock " + ip);
+        }
+    }
+
     /**
      * Метод формирует строку для базы 
      * {@code <OpcKind>Hda</OpcKind><ItemName>"objectName"</ItemName><Server>"serverName"</Server>}

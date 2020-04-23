@@ -142,4 +142,13 @@ public interface LoadOPCRemote {
      * @return имя объекта
      */
     String loadObjectName(String serverName, String ip);
+
+    /**
+     * Метод отправляет сообщение на изменение статуса обеъекта
+     * Блокирует его или разблокирует
+     * @param serverName имя сервера
+     * @param ip ip прибора
+     * @param status статус
+     */
+    void changeStatus(String serverName, String ip, boolean status);
 }
