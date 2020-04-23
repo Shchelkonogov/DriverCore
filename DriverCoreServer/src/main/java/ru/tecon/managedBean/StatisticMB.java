@@ -21,6 +21,7 @@ import java.util.List;
 public class StatisticMB implements Serializable {
 
     private List<WebStatistic> tableData = new ArrayList<>();
+    private WebStatistic selectedRow;
 
     @EJB
     private LoadOPCLocal bean;
@@ -32,6 +33,18 @@ public class StatisticMB implements Serializable {
 
     public List<WebStatistic> getTableData() {
         return tableData;
+    }
+
+    public WebStatistic getSelectedRow() {
+        return selectedRow;
+    }
+
+    public void setSelectedRow(WebStatistic selectedRow) {
+        this.selectedRow = selectedRow;
+    }
+
+    public void changeStatus(boolean value) {
+        bean.changeStatus(selectedRow.getServerName(), selectedRow.getIp(), value);
     }
 
     public void update() {

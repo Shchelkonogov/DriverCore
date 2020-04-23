@@ -2,9 +2,11 @@ package ru.tecon.model;
 
 import java.io.Serializable;
 import java.util.StringJoiner;
+import java.util.UUID;
 
 public class WebStatistic implements Serializable {
 
+    private String rowId;
     private String serverName;
     private String ip;
     private String objectName;
@@ -19,6 +21,7 @@ public class WebStatistic implements Serializable {
     public WebStatistic(String serverName, String ip, String objectName, String socketCount,
                         String status, String lastRequestTime, String trafficIn, String trafficOut, String trafficDay,
                         String trafficMonth) {
+        rowId = UUID.randomUUID().toString();
         this.serverName = serverName;
         this.ip = ip;
         this.objectName = objectName;
@@ -69,6 +72,10 @@ public class WebStatistic implements Serializable {
 
     public String getTrafficMonth() {
         return trafficMonth;
+    }
+
+    public String getRowId() {
+        return rowId;
     }
 
     public void setSocketCount(String socketCount) {

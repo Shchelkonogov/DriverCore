@@ -7,3 +7,15 @@ html, body {
     -ms-user-select: none;
     user-select: none;
 }
+
+body .ui-datatable thead th {
+    padding: 1px;
+}
+
+body .ui-datatable .ui-datatable-data>tr>td {
+    padding: 2px 1px;
+}
+
+.text-center {
+    text-align: center;
+}

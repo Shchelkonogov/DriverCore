@@ -21,6 +21,7 @@ function connect() {
 
     ws.onclose = function(e) {
         console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+        // TODO Выводить сообщение что оборвалось соединение а не переподключаться
         setTimeout(function() {
             connect();
         }, 1000);

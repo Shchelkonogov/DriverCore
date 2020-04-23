@@ -18,15 +18,19 @@
 
     <h:form id="tableForm" style="height: calc(100% - 5px); margin: 5px;">
         <p:dataTable id="table" emptyMessage="Данных нет" var="rowData" value="#{statisticBean.tableData}"
-                     scrollable="true" scrollHeight="100%">
+                     scrollable="true" scrollHeight="100%" sortBy="#{rowData.objectName}" sortOrder="ascending"
+                     selectionMode="single" selection="#{statisticBean.selectedRow}" rowKey="#{rowData.rowId}">
             <p:columnGroup type="header">
                 <p:row>
-                    <p:column rowspan="2" headerText="имя сервера" width="100" />
-                    <p:column rowspan="2" headerText="ip адрес" width="100" />
-                    <p:column rowspan="2" headerText="имя объекта" width="100" />
-                    <p:column rowspan="2" headerText="кол-во" width="70" />
-                    <p:column rowspan="2" headerText="статус" width="120" />
-                    <p:column rowspan="2" headerText="последняя связь" width="150" />
+                    <p:column filterBy="#{rowData.serverName}" filterMatchMode="contains" sortBy="#{rowData.serverName}"
+                              rowspan="2" headerText="имя сервера" width="100" />
+                    <p:column filterBy="#{rowData.ip}" filterMatchMode="contains" sortBy="#{rowData.ip}"
+                              rowspan="2" headerText="ip адрес" width="100" />
+                    <p:column filterBy="#{rowData.objectName}" filterMatchMode="contains" sortBy="#{rowData.objectName}"
+                              rowspan="2" headerText="имя объекта" width="100" />
+                    <p:column rowspan="2" headerText="сокет" width="70" sortBy="#{rowData.socketCount}" />
+                    <p:column rowspan="2" headerText="статус" width="120" sortBy="#{rowData.status}" />
+                    <p:column rowspan="2" headerText="сеанс связи" width="150"/>
                     <p:column colspan="4" headerText="трафик" width="540"/>
                 </p:row>
                 <p:row>
@@ -41,42 +45,47 @@
                 <h:outputText value="#{rowData.serverName}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.ip}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.objectName}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.socketCount}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.status}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.lastRequestTime}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.trafficIn}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.trafficOut}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.trafficDay}" />
             </p:column>
 
-            <p:column>
+            <p:column styleClass="text-center">
                 <h:outputText value="#{rowData.trafficMonth}" />
             </p:column>
         </p:dataTable>
+
+        <p:contextMenu for="table">
+            <p:menuitem value="блокировать" action="#{statisticBean.changeStatus(true)}"/>
+            <p:menuitem value="разблокировать" action="#{statisticBean.changeStatus(false)}"/>
+        </p:contextMenu>
     </h:form>
 </h:body>
 </html>
