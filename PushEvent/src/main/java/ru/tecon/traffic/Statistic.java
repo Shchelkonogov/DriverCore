@@ -63,6 +63,9 @@ public class Statistic {
         return statisticSer.getSocketCount().get();
     }
 
+    /**
+     * Метод для сброса количества сокетов
+     */
     public void clearSocketCount() {
         if ((socket == null) || socket.isClosed()) {
             statisticSer.getSocketCount().set(0);
@@ -140,6 +143,9 @@ public class Statistic {
         }
     }
 
+    /**
+     * Метод очищает суточный трафик
+     */
     public void clearDayTraffic() {
         statisticSer.getInputTrafficReal().set(0);
         statisticSer.getOutputTrafficReal().set(0);
@@ -149,11 +155,19 @@ public class Statistic {
         setBlock(false);
     }
 
+    /**
+     * Метод очищает месячный трафик
+     */
     public void clearMonthTraffic() {
         statisticSer.getMonthTrafficReal().set(0);
         statisticSer.getMonthTraffic().set(0);
     }
 
+    /**
+     * Метод для округления трафика округляется вверх до ближайщего килобайта
+     * @param count значение трафика
+     * @return округленное значение
+     */
     private int roundTraffic(int count) {
         return ((int) Math.ceil(count / 1024d)) * 1024;
     }
@@ -228,6 +242,9 @@ public class Statistic {
                 getInputTraffic(), getOutputTraffic(), getTraffic(), getMonthTraffic());
     }
 
+    /**
+     * Метод сериализует данные статистики в файл
+     */
     public void serialize() {
         try (ObjectOutputStream oos = new ObjectOutputStream(
                 new FileOutputStream(ProjectProperty.getStatisticSerFolder() + "/" + getIp().replaceAll("[.]", "_") + ".ser"))) {
@@ -237,6 +254,10 @@ public class Statistic {
         }
     }
 
+    /**
+     * Метод десериализует объект из фаула
+     * @param path путь к файлу
+     */
     public void deserialize(String path) {
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
             statisticSer = (StatisticSer) ois.readObject();
