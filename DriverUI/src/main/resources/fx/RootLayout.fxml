@@ -19,9 +19,9 @@
                           <columns>
                             <TableColumn fx:id="ipColumn" minWidth="120.0" prefWidth="120.0" text="ip адрес" />
                               <TableColumn fx:id="objectNameColumn" minWidth="120.0" prefWidth="120.0" styleClass="center-column" text="имя объекта" />
-                              <TableColumn fx:id="socketCountColumn" minWidth="70.0" prefWidth="70.0" styleClass="center-column" text="кол-во" />
+                              <TableColumn fx:id="socketCountColumn" minWidth="70.0" prefWidth="70.0" styleClass="center-column" text="сокет" />
                               <TableColumn fx:id="block" minWidth="120.0" prefWidth="120.0" styleClass="center-column" text="статус" />
-                              <TableColumn fx:id="lastRequestTimeColumn" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="последняя связь" />
+                              <TableColumn fx:id="lastRequestTimeColumn" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="сеанс связи" />
                               <TableColumn prefWidth="75.0" text="трафик">
                                  <columns>
                                     <TableColumn fx:id="inputTrafficColumn" minWidth="150.0" prefWidth="150.0" styleClass="center-column" text="входящий" />
