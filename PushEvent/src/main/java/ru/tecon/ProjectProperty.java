@@ -2,6 +2,7 @@ package ru.tecon;
 
 import ru.tecon.exception.MyServerStartException;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -24,7 +25,8 @@ public class ProjectProperty {
     private static Path configFile;
     private static Path instantConfigFile;
     private static String serverName;
-    private static Path logFolder;
+    private static Path pushEventLogFolder;
+    private static Path statisticSerFolder;
     private static String serverURI;
     private static String serverPort;
     private static boolean checkRequestService = true;
@@ -55,8 +57,12 @@ public class ProjectProperty {
 
             serverName = prop.getProperty("serverName");
 
-            property = prop.getProperty("logFolder");
-            logFolder = Paths.get(property.startsWith("/") ? userDir + property : property);
+            property = prop.getProperty("logFolder", userDir + "/logs");
+            Path logFolder = Paths.get(property.startsWith("/") ? userDir + property : property);
+            pushEventLogFolder = Paths.get(property + "/pushEvent");
+            statisticSerFolder = Paths.get(property + "/statisticSer");
+
+            checkFolder(logFolder, pushEventLogFolder, statisticSerFolder);
 
             serverURI = prop.getProperty("serverURI");
             serverPort = prop.getProperty("serverPort");
@@ -67,14 +73,21 @@ public class ProjectProperty {
                 checkRequestService = false;
             }
 
-            if ((port == 0) || (serverName == null) || (logFolder == null) ||
-                    (serverURI == null) || (serverPort == null) || (instantPort == 0) ||
-                    !Files.exists(configFile) || !Files.exists(instantConfigFile) || !Files.exists(logFolder)) {
+            if ((port == 0) || (instantPort == 0) || !Files.exists(configFile) || !Files.exists(instantConfigFile) ||
+                    (serverName == null) || (serverURI == null) || (serverPort == null)) {
                 LOG.warning("loadProperties error не хвататет полей в конфигурационном файле");
                 Utils.error("loadProperties error не хвататет полей в конфигурационном файле");
             }
         } catch (IOException | NumberFormatException e) {
             Utils.error("loadProperties error properties load:", e);
+        }
+    }
+
+    private static void checkFolder(Path... paths) throws IOException {
+        for (Path path: paths) {
+            if (!Files.exists(path)) {
+                Files.createDirectory(path);
+            }
         }
     }
 
@@ -90,12 +103,12 @@ public class ProjectProperty {
         return serverName;
     }
 
-    public static Path getLogFolder() {
-        return logFolder;
+    public static String getPushEventLogFolder() {
+        return pushEventLogFolder.toAbsolutePath().toString();
     }
 
-    public static String getLogFolderString() {
-        return logFolder.toAbsolutePath().toString();
+    public static String getStatisticSerFolder() {
+        return statisticSerFolder.toAbsolutePath().toString();
     }
 
     public static String getServerURI() {

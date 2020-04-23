@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -72,20 +71,18 @@ public class EchoSocketServer {
         log.info("controller config load");
         System.out.println("Конфигурация контроллера загружена");
 
-        if (Files.exists(Paths.get(ProjectProperty.getLogFolderString() + "/statisticSer"))) {
-            File[] files = new File(ProjectProperty.getLogFolderString() + "/statisticSer").listFiles();
-            if (files != null) {
-                for (File fileEntry : files) {
-                    if (!fileEntry.isDirectory()) {
-                        String ip = fileEntry.getName().replaceFirst("[.][^.]+$", "").replaceAll("_", ".");
-                        Statistic st = new Statistic(ip, event);
-                        st.deserialize(fileEntry.toPath().toAbsolutePath().toString());
-                        statistic.put(ip, st);
-                        try {
-                            Files.delete(fileEntry.toPath());
-                        } catch (IOException e) {
-                            log.log(Level.WARNING, "file delete error", e);
-                        }
+        File[] files = new File(ProjectProperty.getStatisticSerFolder()).listFiles();
+        if (files != null) {
+            for (File fileEntry : files) {
+                if (!fileEntry.isDirectory()) {
+                    String ip = fileEntry.getName().replaceFirst("[.][^.]+$", "").replaceAll("_", ".");
+                    Statistic st = new Statistic(ip, event);
+                    st.deserialize(fileEntry.toPath().toAbsolutePath().toString());
+                    statistic.put(ip, st);
+                    try {
+                        Files.delete(fileEntry.toPath());
+                    } catch (IOException e) {
+                        log.log(Level.WARNING, "file delete error", e);
                     }
                 }
             }
@@ -175,7 +172,7 @@ public class EchoSocketServer {
                 serverSocket.close();
                 statistic.forEach((k, v) -> {
                     v.close();
-                    v.serialize(ProjectProperty.getLogFolderString());
+                    v.serialize();
                 });
                 statistic.clear();
             }

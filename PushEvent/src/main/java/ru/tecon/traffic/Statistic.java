@@ -228,17 +228,9 @@ public class Statistic {
                 getInputTraffic(), getOutputTraffic(), getTraffic(), getMonthTraffic());
     }
 
-    public void serialize(String path) {
-        if (!Files.exists(Paths.get(path + "/statisticSer"))) {
-            try {
-                Files.createDirectory(Paths.get(path + "/statisticSer"));
-            } catch (IOException e) {
-                log.log(Level.WARNING, "create dir error", e);
-            }
-        }
-
+    public void serialize() {
         try (ObjectOutputStream oos = new ObjectOutputStream(
-                new FileOutputStream(path + "/statisticSer/" + getIp().replaceAll("[.]", "_") + ".ser"))) {
+                new FileOutputStream(ProjectProperty.getStatisticSerFolder() + "/" + getIp().replaceAll("[.]", "_") + ".ser"))) {
             oos.writeObject(statisticSer);
         } catch (IOException e) {
             log.log(Level.WARNING, "serialize error", e);

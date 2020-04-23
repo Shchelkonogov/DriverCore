@@ -543,7 +543,7 @@ public class EchoThread extends Thread {
             LOG.log(Level.WARNING, "IndexOutOfBoundsException:", e);
         }
 
-        String path = ProjectProperty.getLogFolder().toAbsolutePath().toString() + "/" + socket.getInetAddress().getHostAddress();
+        String path = ProjectProperty.getPushEventLogFolder() + "/" + socket.getInetAddress().getHostAddress();
         if (!Files.exists(Paths.get(path))) {
             Files.createDirectory(Paths.get(path));
         }
