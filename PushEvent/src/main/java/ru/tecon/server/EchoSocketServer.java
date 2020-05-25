@@ -103,7 +103,7 @@ public class EchoSocketServer {
         log.info("Instant data service start");
         System.out.println("Сервис обработки запросов на мгновенные данные запущен");
 
-        long midnight= LocalDateTime.now().until(LocalDate.now().plusDays(1).atStartOfDay(), ChronoUnit.MINUTES);
+        long midnight= LocalDateTime.now().until(LocalDate.now().plusDays(1).atStartOfDay(), ChronoUnit.MINUTES) + 1;
         service = Executors.newSingleThreadScheduledExecutor();
         future = service.scheduleAtFixedRate(() ->
                 statistic.forEach((s, st) -> {
