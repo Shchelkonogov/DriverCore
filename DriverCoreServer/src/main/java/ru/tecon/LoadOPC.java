@@ -85,7 +85,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     private static final String SQL_GET_OPC_OBJECT_ID = "select b.id, b.display_name, a.id from arm_commands a " +
             "inner join tsa_opc_object b " +
             "on a.args = b.opc_path and a.kind = 'ForceBrowse' " +
-            "and a.is_success_execution is null " +
+            "and (a.is_success_execution = 2 or a.is_success_execution is null) " +
             "and extractValue(XMLType('<Group>' || a.args || '</Group>'), '/Group/Server') = ?";
     /**
      * select выгружает id запросов на конфигурацию сервера <br>
@@ -230,7 +230,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             "      (select aspid_object_id from tsa_linked_object " +
             "           where opc_object_id in (select id from tsa_opc_object " +
             "               where display_name like ?)) " +
-            "and kind = 'AsyncRefresh' and is_success_execution is null";
+            "and kind = 'AsyncRefresh' and (is_success_execution is null or is_success_execution = 2)";
 
     /**
      * SQL для определения имени объекта по имени сервера и ip адреса прибора
