@@ -107,6 +107,7 @@ public class EchoSocketServer {
         service = Executors.newSingleThreadScheduledExecutor();
         future = service.scheduleAtFixedRate(() ->
                 statistic.forEach((s, st) -> {
+                    st.close();
                     st.clearSocketCount();
                     st.clearDayTraffic();
                     if (LocalDate.now().getDayOfMonth() == 1) {
