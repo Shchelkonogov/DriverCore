@@ -145,11 +145,14 @@ public class EchoSocketServer {
                 continue;
             }
 
-            log.info("new connection from " + socket.getInetAddress().getHostAddress());
+            String host = socket.getInetAddress().getHostAddress();
+            log.info("new connection from " + host);
 
-            if (!isBlocked(socket.getInetAddress().getHostAddress())) {
+            if (!isBlocked(host) && !getStatistic(host).isSocketOpen()) {
                 EchoThread thread = new EchoThread(socket, ProjectProperty.getServerName());
                 thread.start();
+
+                log.info("Thread create " + thread.getId() + " for ip: " + host);
             }
         }
     }
