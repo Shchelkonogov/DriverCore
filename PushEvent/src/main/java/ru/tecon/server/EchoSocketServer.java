@@ -31,7 +31,7 @@ public class EchoSocketServer {
 
     private static Logger log = Logger.getLogger(EchoSocketServer.class.getName());
 
-    private static final WebSocketClient webSocketClient = new WebSocketClient();
+    private static final WebSocketClient WEB_SOCKET_CLIENT = new WebSocketClient();
 
     private static ConcurrentMap<String, Statistic> statistic = new ConcurrentHashMap<>();
 
@@ -90,8 +90,8 @@ public class EchoSocketServer {
         log.info("controller config load");
         System.out.println("Конфигурация контроллера загружена");
 
-        // Запускаем webSocketClient
-        webSocketClient.connectToWebSocketServer();
+        // Запускаем WEB_SOCKET_CLIENT
+        WEB_SOCKET_CLIENT.connectToWebSocketServer();
         log.info("Web socket client start");
         System.out.println("Сервер получения данных доступен");
 
@@ -161,7 +161,7 @@ public class EchoSocketServer {
      * Метод останавливает работу приложения
      */
     public static void stopSocket() {
-        webSocketClient.stopService();
+        WEB_SOCKET_CLIENT.stopService();
         ControllerConfig.stopUploaderService();
         InstantDataService.stopService();
 
