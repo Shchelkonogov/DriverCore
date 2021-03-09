@@ -1,6 +1,7 @@
 package ru.tecon.instantData;
 
 import ru.tecon.ProjectProperty;
+import ru.tecon.isacom.*;
 import ru.tecon.model.DataModel;
 import ru.tecon.model.ValueModel;
 import ru.tecon.Utils;
@@ -11,13 +12,9 @@ import ru.tecon.traffic.Statistic;
 
 import javax.naming.NamingException;
 import java.io.*;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.Executors;
@@ -30,25 +27,12 @@ import java.util.logging.Logger;
 /**
  * Класс для работы с мгновенными данными
  */
-public class InstantDataService {
+public final class InstantDataService {
 
     private static final Logger LOG = Logger.getLogger(InstantDataService.class.getName());
-    private static final Map<String, String> methodsMap;
 
     private static ScheduledExecutorService service;
     private static ScheduledFuture future;
-
-    // Блок для инициализации map методов разбора реализованных простых типов
-    static {
-        methodsMap = new HashMap<>();
-        Method[] method = InstantDataService.class.getMethods();
-
-        for(Method md: method){
-            if (md.isAnnotationPresent(InstantTypes.class)) {
-                methodsMap.put(md.getAnnotation(InstantTypes.class).name().toString(), md.getName());
-            }
-        }
-    }
 
     private InstantDataService() {
 
@@ -98,37 +82,71 @@ public class InstantDataService {
 
             LOG.info("load instantData for url: " + url + " parameters count: " + parameters.size());
 
-            int size = 0;
-            List<InstantDataModel> dataModelList = new ArrayList<>();
+            List<IsacomModel> isacomModels = new ArrayList<>();
             for (DataModel model : parameters) {
                 String[] infoSplit = model.getParamName().split("::");
                 if ((infoSplit.length == 2) && (infoSplit[0].split(":").length == 2)) {
                     String[] paramSplit = infoSplit[1].split(":");
                     switch (paramSplit.length) {
                         case 1:
-                            if (InstantDataTypes.isContains(paramSplit[0])) {
-                                dataModelList.add(new InstantDataModel(infoSplit[0].split(":")[0], paramSplit[0],
-                                        InstantDataTypes.valueOf(paramSplit[0]).getSize()));
-                                size += infoSplit[0].split(":")[0].getBytes().length + 1 + paramSplit[0].getBytes().length + 1 + 4;
+                            if (IsacomSimpleTypes.isContains(paramSplit[0])) {
+                                isacomModels.add(new IsacomModel(infoSplit[0].split(":")[0], new IsacomType() {
+                                    @Override
+                                    public String getName() {
+                                        return paramSplit[0];
+                                    }
+
+                                    @Override
+                                    public int getSize() {
+                                        return IsacomSimpleTypes.valueOf(paramSplit[0]).getSize();
+                                    }
+                                }));
                             }
                             break;
                         case 4:
-                            if (InstantDataTypes.isContains(paramSplit[3])) {
+                            if (IsacomSimpleTypes.isContains(paramSplit[3])) {
                                 String split = infoSplit[0].split(":")[0];
                                 String paramName = split.substring(0, split.lastIndexOf("_"));
-                                dataModelList.add(new InstantDataModel(paramName, paramSplit[0], Integer.parseInt(paramSplit[1]),
-                                        Integer.parseInt(paramSplit[2]), paramSplit[3], split));
-                                size += paramName.getBytes().length + 1 + paramSplit[0].getBytes().length + 1 + 4;
+                                IsacomModel isacomModel = new IsacomModel(paramName, new IsacomType() {
+                                    @Override
+                                    public String getName() {
+                                        return paramSplit[0];
+                                    }
+
+                                    @Override
+                                    public int getSize() {
+                                        return Integer.parseInt(paramSplit[1]);
+                                    }
+
+                                    @Override
+                                    public int getOffset() {
+                                        return Integer.parseInt(paramSplit[2]);
+                                    }
+                                });
+
+                                isacomModel.setSubModel(new IsacomModel(split, new IsacomType() {
+                                    @Override
+                                    public String getName() {
+                                        return paramSplit[3];
+                                    }
+
+                                    @Override
+                                    public int getSize() {
+                                        return IsacomSimpleTypes.valueOf(paramSplit[3]).getSize();
+                                    }
+                                }));
+
+                                isacomModels.add(isacomModel);
                             }
                             break;
                         case 5:
-                            // TODO реализовать вариант для String размер string указан в sysInfo и открыть доступ к String в InstantTypes
+                            // TODO реализовать вариант для String размер string указан в sysInfo
                             break;
                     }
                 }
             }
 
-            if (dataModelList.isEmpty()) {
+            if (isacomModels.isEmpty()) {
                 LOG.warning("Есть запрос на мгновенные данные, но не удалось распознать параметры");
                 Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath,
                         "По объекту '" + errorPath + "' не подписан ни один параметр");
@@ -136,84 +154,47 @@ public class InstantDataService {
             }
 
             // Открываю подключение к прибору
-            byte[] response = new byte[16];
-
             Socket socket = new Socket(InetAddress.getByName(url), ProjectProperty.getInstantPort());
 
             Statistic st = EchoSocketServer.getStatistic(url);
 
-            MonitorInputStream monitorIn = new MonitorInputStream(socket.getInputStream());
-            monitorIn.setStatistic(st);
+            MonitorInputStream in = new MonitorInputStream(socket.getInputStream());
+            in.setStatistic(st);
 
             MonitorOutputStream out = new MonitorOutputStream(socket.getOutputStream());
             out.setStatistic(st);
 
-            DataInputStream in = new DataInputStream(new BufferedInputStream(monitorIn));
-
-            // Реализую запрос на создание списка переменных
-            ByteBuffer head = ByteBuffer.allocate(16 + size).order(ByteOrder.LITTLE_ENDIAN)
-                    .putInt(6)
-                    .putInt(Integer.valueOf("0000001001000001", 2))
-                    .putInt(size)
-                    .putInt(0);
-
-            for (InstantDataModel instantDataModel : dataModelList) {
-                head.put(instantDataModel.getName().getBytes())
-                        .put((byte) 0)
-                        .put(instantDataModel.getType().getBytes())
-                        .put((byte) 0)
-                        .putInt(instantDataModel.getTypeSize());
-            }
-
-            out.write(head.array());
-            out.flush();
-
-            if ((in.read(response) != 16) &&
-                    (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
-                LOG.warning("Проблема чтения ответа на создание переменных: " + Arrays.toString(response));
+            try {
+                IsacomProtocol.createVariableList(in, out, isacomModels);
+            } catch (IsacomException e) {
+                LOG.warning("Проблема чтения ответа на создание переменных");
                 Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath, "Проблема чтения ответа на создание переменных");
                 return;
             }
 
-            // Реализую запрос на чтение переменных по списку
-            byte[] request = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
-                    .putInt(7)
-                    .putInt(1)
-                    .putInt(0)
-                    .putInt(0).array();
-
-            out.write(request);
-            out.flush();
-
-            if ((in.read(response) != 16) &&
-                    (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
-                LOG.warning("Проблема чтения ответа на чтение переменных по списку: " + Arrays.toString(response));
+            try {
+                IsacomProtocol.readVariableList(in, out, isacomModels);
+            } catch (IsacomException e) {
+                LOG.warning("Проблема чтения ответа на чтение переменных по списку");
                 Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath, "Проблема чтения ответа на чтение переменных по списку");
                 return;
             }
 
-            byte[] data = new byte[ByteBuffer.wrap(Arrays.copyOfRange(response, 8, 12)).order(ByteOrder.LITTLE_ENDIAN).getInt()];
+            for (IsacomModel isacomModel: isacomModels) {
+                String paramName;
 
-            in.readFully(data);
-
-            int index = 0;
-            for (InstantDataModel instantDataModel : dataModelList) {
-                if (data[index] == 0) {
-                    ByteBuffer buffer = ByteBuffer.wrap(Arrays.copyOfRange(data, index + 1, index + 1 + instantDataModel.getTypeSize()))
-                            .order(ByteOrder.BIG_ENDIAN);
-
-                    if (instantDataModel.isFunctionType()) {
-                        buffer = ByteBuffer.wrap(Arrays.copyOfRange(buffer.array(), instantDataModel.getOffset(),
-                                instantDataModel.getOffset() + InstantDataTypes.valueOf(instantDataModel.getSubType()).getSize()))
-                                .order(ByteOrder.BIG_ENDIAN);
-                        loadSimpleType(instantDataModel.getSubType(), instantDataModel.getFullName(), buffer, parameters);
-                    } else {
-                        loadSimpleType(instantDataModel.getType(), instantDataModel.getName(), buffer, parameters);
-                    }
-
-                    index += instantDataModel.getTypeSize();
+                if (isacomModel.getSubModel() != null) {
+                    paramName = isacomModel.getSubModel().getName();
+                } else {
+                    paramName = isacomModel.getName();
                 }
-                index += 1;
+
+                for (DataModel model: parameters) {
+                    if (model.getParamName().startsWith(paramName + ":Текущие данные")) {
+                        model.addData(new ValueModel(isacomModel.getValue(), LocalDateTime.now()));
+                        break;
+                    }
+                }
             }
 
             parameters.removeIf(dataModel -> dataModel.getData().isEmpty());
@@ -228,56 +209,8 @@ public class InstantDataService {
             } catch (NamingException ex) {
                 LOG.log(Level.WARNING, "load RMI exception", ex);
             }
-        } catch (NamingException | NoSuchMethodException | IllegalAccessException | InvocationTargetException | IOException e) {
+        } catch (NamingException | IOException e) {
             LOG.log(Level.WARNING, "error with load instant data", e);
         }
-    }
-
-    /**
-     * Метод обертка разбирает простые типы
-     * @param type имя простого типа
-     * @param paramName имя параметра
-     * @param buffer буффер с данными
-     * @param parameters массив параметров куда кладутся значения
-     * @throws NoSuchMethodException ошибка
-     * @throws InvocationTargetException ошибка
-     * @throws IllegalAccessException ошибка
-     */
-    private static void loadSimpleType(String type, String paramName, ByteBuffer buffer, List<DataModel> parameters)
-            throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-        if (methodsMap.get(type) != null) {
-            String value = String.valueOf(InstantDataService.class
-                    .getDeclaredMethod(methodsMap.get(type), ByteBuffer.class)
-                    .invoke(null, buffer));
-
-            for (DataModel model: parameters) {
-                if (model.getParamName().startsWith(paramName + ":Текущие данные")) {
-                    model.addData(new ValueModel(value, LocalDateTime.now()));
-                    break;
-                }
-            }
-        } else {
-            LOG.warning("Отсутствует метод для разбора мгновенного значения " + type);
-        }
-    }
-
-    @InstantTypes(name = InstantDataTypes.REAL)
-    public static float readReal(ByteBuffer buffer) {
-        return buffer.getFloat();
-    }
-
-    @InstantTypes(name = InstantDataTypes.DINT)
-    public static int readDint(ByteBuffer buffer) {
-        return buffer.getInt();
-    }
-
-    @InstantTypes(name = InstantDataTypes.INT)
-    public static short readInt(ByteBuffer buffer) {
-        return buffer.getShort();
-    }
-
-    @InstantTypes(name = InstantDataTypes.BOOL)
-    public static byte readBool(ByteBuffer buffer) {
-        return buffer.get();
     }
 }
