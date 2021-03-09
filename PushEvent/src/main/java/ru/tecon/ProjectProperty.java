@@ -2,7 +2,6 @@ package ru.tecon;
 
 import ru.tecon.exception.MyServerStartException;
 
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
