@@ -1,4 +1,4 @@
-package ru.tecon.instantData;
+package ru.tecon.isacom;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -7,7 +7,7 @@ import java.lang.annotation.Target;
 
 @Target(value = ElementType.METHOD)
 @Retention(value = RetentionPolicy.RUNTIME)
-public @interface InstantTypes {
+public @interface Isacom {
 
-    InstantDataTypes name();
+    IsacomSimpleTypes name();
 }
