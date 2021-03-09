@@ -95,7 +95,7 @@ public class ProjectProperty {
         return port;
     }
 
-    static Path getConfigFile() {
+    public static Path getConfigFile() {
         return configFile;
     }
 
@@ -127,7 +127,7 @@ public class ProjectProperty {
         return instantPort;
     }
 
-    static Path getInstantConfigFile() {
+    public static Path getInstantConfigFile() {
         return instantConfigFile;
     }
 
