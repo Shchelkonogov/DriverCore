@@ -1,18 +1,26 @@
-package ru.tecon;
+package ru.tecon.controllerData;
 
 import com.jcraft.jsch.*;
-import ru.tecon.instantData.InstantDataTypes;
+import ru.tecon.ProjectProperty;
+import ru.tecon.Utils;
+import ru.tecon.isacom.*;
+import ru.tecon.model.ObjectInfoModel;
 import ru.tecon.server.EchoSocketServer;
+import ru.tecon.traffic.ControllerSocket;
 import ru.tecon.traffic.MonitorInputStream;
 import ru.tecon.traffic.Statistic;
 
 import javax.naming.NamingException;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.nio.file.Files;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -20,7 +28,7 @@ import java.util.stream.Collectors;
 /**
  * Класс для работы с конфигурацией контроллера
  */
-public class ControllerConfig {
+public final class ControllerConfig {
 
     private static final Logger LOG = Logger.getLogger(ControllerConfig.class.getName());
 
@@ -30,6 +38,8 @@ public class ControllerConfig {
 
     private static ScheduledExecutorService service;
     private static ScheduledFuture future;
+
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
 
     private ControllerConfig() {
 
@@ -156,13 +166,9 @@ public class ControllerConfig {
         }
 
         try {
-            Properties prop = new Properties();
-            prop.put("StrictHostKeyChecking", "no");
-
-            JSch jsch = new JSch();
-            Session session = jsch.getSession("root", url, 22);
-            session.setPassword("tecon");
-            session.setConfig(prop);
+            Session session = new JSch().getSession(ProjectProperty.SSH_LOGIN, url, ProjectProperty.SSH_PORT);
+            session.setPassword(ProjectProperty.SSH_PASSWORD);
+            session.setConfig("StrictHostKeyChecking", "no");
             session.connect();
 
             Channel channel = session.openChannel("exec");
@@ -205,7 +211,7 @@ public class ControllerConfig {
             List<String> variablesList = new LinkedList<>(Arrays.asList(variables.split("\n")));
             variablesList.removeIf(s -> !s.startsWith("V"));
 
-            List<String> simpleTypes = Arrays.stream(InstantDataTypes.values())
+            List<String> simpleTypes = Arrays.stream(IsacomSimpleTypes.values())
                     .map(Enum::name)
                     .collect(Collectors.toList());
 
@@ -304,5 +310,196 @@ public class ControllerConfig {
         }
 
         return result;
+    }
+
+    /**
+     * Метод по ssh и по isacom общается с MFK1500 и получает от него системные параметры
+     * По isacom получаем параметры из {@link ControllerSystemVariable}
+     * По ssh получаем время на MFK1500
+     * @param url ip прибора
+     * @return список полученных системных параметров
+     */
+    public static List<ObjectInfoModel> getControllerInfo(String url) {
+        List<ObjectInfoModel> result = new ArrayList<>();
+        try (ControllerSocket socket = new ControllerSocket(url);
+             InputStream in = socket.getInputStream();
+             OutputStream out = socket.getOutputStream()) {
+
+            // Получаем системные параметры по isacom
+            List<IsacomModel> model = new ArrayList<>();
+            for (ControllerSystemVariable value: ControllerSystemVariable.values()) {
+                model.add(new IsacomModel(value.name(), new IsacomType() {
+                    @Override
+                    public String getName() {
+                        return value.getType().name();
+                    }
+
+                    @Override
+                    public int getSize() {
+                        return value.getType().getSize();
+                    }
+                }));
+            }
+
+            IsacomProtocol.createVariableList(in, out, model);
+            IsacomProtocol.readVariableList(in, out, model);
+
+            model.forEach(isacomModel -> result.add(new ObjectInfoModel(isacomModel.getName(), isacomModel.getValue(), 
+                    ControllerSystemVariable.isWrite(isacomModel.getName()))));
+
+            // Получаем время на MFK1500
+            StringBuilder sb = jschShellExecCommand(url, "tvar print /var/tm/local");
+            if (!sb.toString().isEmpty()) {
+                String[] split = sb.toString().split(" ");
+                if (split.length == 6) {
+                    LocalDateTime localDateTime = LocalDateTime.of(Integer.valueOf(split[5]), Integer.valueOf(split[4]),
+                            Integer.valueOf(split[3]), Integer.valueOf(split[2]), Integer.valueOf(split[1]),
+                            Integer.valueOf(split[0]));
+                    result.add(new ObjectInfoModel("Время", localDateTime.format(FORMATTER), false));
+
+                    Duration duration = Duration.between(LocalDateTime.now(), localDateTime);
+
+                    long input = duration.getSeconds();
+
+                    String format = "";
+                    if (duration.getSeconds() < 0) {
+                        format = "- ";
+                        input *= -1;
+                    }
+
+                    long numberOfDays = input / 86400;
+                    long numberOfHours = (input % 86400 ) / 3600 ;
+                    long numberOfMinutes = ((input % 86400 ) % 3600 ) / 60;
+                    long numberOfSeconds = ((input % 86400 ) % 3600 ) % 60;
+
+                    String difference = String.format(format + "%d.%02d:%02d:%02d",
+                            numberOfDays, numberOfHours, numberOfMinutes, numberOfSeconds);
+
+                    result.add(new ObjectInfoModel("Рассинхронизация времени", difference, false));
+                } else {
+                    result.add(new ObjectInfoModel("Время", sb.toString(), false));
+                }
+            }
+        } catch (IOException | IsacomException | JSchException e) {
+            LOG.warning("Ошибка общения с прибором по isacom или ssh " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * Метод по isacom общается с MFK1500 и записывает в него новые значения системных параметров
+     * Системные параметры из {@link ControllerSystemVariable}
+     * @param url ip прибора
+     * @param info информация для записи
+     */
+    public static void setControllerInfo(String url, String info) {
+        try (ControllerSocket socket = new ControllerSocket(url);
+             InputStream in = socket.getInputStream();
+             OutputStream out = socket.getOutputStream()) {
+
+            List<IsacomModel> isacomModels = new ArrayList<>();
+            for (String s: info.split(";")) {
+                String name = s.split(":")[0];
+                String value = s.split(":")[1];
+                if (ControllerSystemVariable.isContains(name)) {
+                    IsacomSimpleTypes simpleType = ControllerSystemVariable.valueOf(name).getType();
+                    isacomModels.add(new IsacomModel(name, new IsacomType() {
+                        @Override
+                        public String getName() {
+                            return simpleType.name();
+                        }
+
+                        @Override
+                        public int getSize() {
+                            return simpleType.getSize();
+                        }
+                    }, value));
+                }
+            }
+
+            LOG.info("Записываем новые значения " + isacomModels.toString() + " в прибор по адресу " + url);
+
+            IsacomProtocol.extendedVariableWriting(in, out, isacomModels);
+
+        } catch (IOException | IsacomException e) {
+            LOG.warning("Ошибка записи новых значений в прибор " + url + " " + e.getMessage());
+        }
+    }
+
+    /**
+     * Метод по ssh общается с MFK1500 и отправляет ему команду на синхронизацию времени
+     * @param url ip прибора
+     */
+    public static void synchronizeDate(String url) {
+        try {
+            jschShellExecCommand(url, "rdate -4 -n 10.98.254.2");
+        } catch (IOException | JSchException e) {
+            LOG.warning("Ошибка синхронизации времени " + e.getMessage());
+        }
+    }
+
+    /**
+     * Метод открывает ssh подключение к прибору и выполняет переданную команду
+     * @param host имя хоста
+     * @param command команда
+     * @return результат выполнения команды
+     * @throws IOException ошибка
+     * @throws JSchException ошибка
+     */
+    private static StringBuilder jschShellExecCommand(String host, String command) throws IOException, JSchException {
+        StringBuilder sb = new StringBuilder();
+
+        Session session = new JSch().getSession(ProjectProperty.SSH_LOGIN, host, ProjectProperty.SSH_PORT);
+        session.setPassword(ProjectProperty.SSH_PASSWORD);
+        session.setConfig("StrictHostKeyChecking", "no");
+        session.connect();
+
+        Channel channel = session.openChannel("shell");
+
+        Statistic st = EchoSocketServer.getStatistic(host);
+        st.updateOutputTraffic(100);
+
+        try (MonitorInputStream monitor = new MonitorInputStream(channel.getInputStream())) {
+            monitor.setStatistic(st);
+
+            try (PrintStream toServer = new PrintStream(channel.getOutputStream());
+                 BufferedReader reader = new BufferedReader(new InputStreamReader(monitor))) {
+                channel.connect();
+
+                toServer.println(command);
+                toServer.println("exit");
+                toServer.flush();
+
+                List<String> lines = new ArrayList<>();
+
+                reader.lines().forEach(s -> {
+                    if (!s.isEmpty()) {
+                        lines.add(s);
+                    }
+                });
+
+                boolean add = false;
+                String endString = "";
+                for (String line: lines) {
+                    if (add) {
+                        if (line.startsWith(endString)) {
+                            break;
+                        }
+                        sb.append(line);
+                    }
+
+                    if (line.endsWith(command)) {
+                        add = true;
+                        endString = line.replaceFirst(command, "");
+                    }
+                }
+            }
+        }
+
+        channel.disconnect();
+        session.disconnect();
+
+        return sb;
     }
 }
