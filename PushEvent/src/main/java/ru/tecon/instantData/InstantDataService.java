@@ -1,22 +1,22 @@
 package ru.tecon.instantData;
 
 import ru.tecon.ProjectProperty;
+import ru.tecon.Utils;
 import ru.tecon.isacom.*;
 import ru.tecon.model.DataModel;
 import ru.tecon.model.ValueModel;
-import ru.tecon.Utils;
 import ru.tecon.server.EchoSocketServer;
-import ru.tecon.traffic.MonitorInputStream;
-import ru.tecon.traffic.MonitorOutputStream;
-import ru.tecon.traffic.Statistic;
+import ru.tecon.traffic.ControllerSocket;
 
 import javax.naming.NamingException;
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.ConnectException;
-import java.net.InetAddress;
-import java.net.Socket;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -71,7 +71,10 @@ public final class InstantDataService {
     public static void uploadInstantData(String url) {
         String errorPath = ProjectProperty.getServerName() + "_" + url;
 
-        try {
+        try (ControllerSocket socket = new ControllerSocket(url);
+             InputStream in = socket.getInputStream();
+             OutputStream out = socket.getOutputStream()) {
+
             if (EchoSocketServer.isBlocked(url)) {
                 LOG.info("traffic block");
                 Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath, "Превышение трафика по объекту '" + errorPath + "'");
@@ -152,17 +155,6 @@ public final class InstantDataService {
                         "По объекту '" + errorPath + "' не подписан ни один параметр");
                 return;
             }
-
-            // Открываю подключение к прибору
-            Socket socket = new Socket(InetAddress.getByName(url), ProjectProperty.getInstantPort());
-
-            Statistic st = EchoSocketServer.getStatistic(url);
-
-            MonitorInputStream in = new MonitorInputStream(socket.getInputStream());
-            in.setStatistic(st);
-
-            MonitorOutputStream out = new MonitorOutputStream(socket.getOutputStream());
-            out.setStatistic(st);
 
             try {
                 IsacomProtocol.createVariableList(in, out, isacomModels);
