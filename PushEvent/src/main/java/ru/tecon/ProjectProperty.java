@@ -31,6 +31,10 @@ public class ProjectProperty {
     private static boolean checkRequestService = true;
     private static int trafficLimit;
 
+    public static final String SSH_LOGIN = "root";
+    public static final String SSH_PASSWORD = "tecon";
+    public static final int SSH_PORT = 22;
+
     /**
      * Метод выгружает конфигурацию из файла в себя
      * @param path путь к файлу конфигурации
