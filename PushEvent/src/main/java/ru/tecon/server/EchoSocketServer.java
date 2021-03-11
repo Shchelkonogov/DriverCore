@@ -1,6 +1,6 @@
 package ru.tecon.server;
 
-import ru.tecon.ControllerConfig;
+import ru.tecon.controllerData.ControllerConfig;
 import ru.tecon.ProjectProperty;
 import ru.tecon.Utils;
 import ru.tecon.exception.MyServerStartException;
