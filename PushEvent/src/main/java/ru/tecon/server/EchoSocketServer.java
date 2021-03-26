@@ -31,7 +31,7 @@ public class EchoSocketServer {
 
     private static Logger log = Logger.getLogger(EchoSocketServer.class.getName());
 
-    private static final WebSocketClient WEB_SOCKET_CLIENT = new WebSocketClient();
+    private static final MessageReceiveService JMS_SERVICE = new MessageReceiveService();
 
     private static ConcurrentMap<String, Statistic> statistic = new ConcurrentHashMap<>();
 
@@ -90,9 +90,9 @@ public class EchoSocketServer {
         log.info("controller config load");
         System.out.println("Конфигурация контроллера загружена");
 
-        // Запускаем WEB_SOCKET_CLIENT
-        WEB_SOCKET_CLIENT.connectToWebSocketServer();
-        log.info("Web socket client start");
+        // Подключаемся к jms через JMS_SERVICE
+        JMS_SERVICE.initService();
+        log.info("jms service start");
         System.out.println("Сервер получения данных доступен");
 
         ControllerConfig.startUploaderService();
@@ -162,7 +162,7 @@ public class EchoSocketServer {
      * Метод останавливает работу приложения
      */
     public static void stopSocket() {
-        WEB_SOCKET_CLIENT.stopService();
+        JMS_SERVICE.stopService();
         ControllerConfig.stopUploaderService();
         InstantDataService.stopService();
 
