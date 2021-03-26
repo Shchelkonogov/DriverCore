@@ -1,23 +1,22 @@
 package ru.tecon.server;
 
-import ru.tecon.controllerData.ControllerConfig;
 import ru.tecon.ProjectProperty;
 import ru.tecon.Utils;
+import ru.tecon.controllerData.ControllerConfig;
 import ru.tecon.exception.MyServerStartException;
+import ru.tecon.instantData.InstantDataService;
+import ru.tecon.jms.MessageReceiveService;
 import ru.tecon.traffic.Event;
 import ru.tecon.traffic.Statistic;
-import ru.tecon.instantData.InstantDataService;
-import ru.tecon.webSocket.WebSocketClient;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.Files;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
-import java.util.*;
+import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
@@ -79,11 +78,6 @@ public class EchoSocketServer {
                     Statistic st = new Statistic(ip, event);
                     st.deserialize(fileEntry.toPath().toAbsolutePath().toString());
                     statistic.put(ip, st);
-                    try {
-                        Files.delete(fileEntry.toPath());
-                    } catch (IOException e) {
-                        log.log(Level.WARNING, "file delete error", e);
-                    }
                 }
             }
         }
