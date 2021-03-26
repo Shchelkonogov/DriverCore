@@ -202,6 +202,15 @@ public class EchoSocketServer {
         return statistic;
     }
 
+    /**
+     * Метод удаляет объект из статистики по его ip
+     * @param ip ip объекта статистики для удаления
+     */
+    public static void removeStatistic(String ip) {
+        statistic.remove(ip);
+        event.update();
+    }
+
     public static void setEvent(Event event) {
         EchoSocketServer.event = event;
     }
