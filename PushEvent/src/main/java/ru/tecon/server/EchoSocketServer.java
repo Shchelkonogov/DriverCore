@@ -10,18 +10,22 @@ import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.Event;
 import ru.tecon.traffic.Statistic;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.*;
+import java.nio.file.attribute.FileTime;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
+import java.util.stream.Stream;
 
 /**
  * Сервер для приема socket сообщений от MFK-1500
@@ -38,7 +42,9 @@ public class EchoSocketServer {
     private static ServerSocket serverSocket;
 
     private static ScheduledExecutorService service;
-    private static ScheduledFuture future;
+    private static ScheduledFuture dayFuture;
+    private static ScheduledFuture hourFuture;
+    private static ScheduledFuture future20Minute;
 
     private static boolean closeApplication = true;
 
@@ -106,8 +112,11 @@ public class EchoSocketServer {
         System.out.println("Сервис обработки запросов на мгновенные данные запущен");
 
         long midnight= LocalDateTime.now().until(LocalDate.now().plusDays(1).atStartOfDay(), ChronoUnit.MINUTES) + 1;
-        service = Executors.newSingleThreadScheduledExecutor();
-        future = service.scheduleAtFixedRate(() ->
+        long nextHour = LocalDateTime.now().until(LocalDateTime.now().plusHours(1).withMinute(0), ChronoUnit.MINUTES);
+
+        service = Executors.newScheduledThreadPool(3);
+
+        dayFuture = service.scheduleAtFixedRate(() ->
                 statistic.forEach((s, st) -> {
                     st.close();
                     st.clearSocketCount();
@@ -116,9 +125,43 @@ public class EchoSocketServer {
                         st.clearMonthTraffic();
                     }
                     st.updateObjectName();
-                    st.setBlock(false);
-                }
-        ), midnight, TimeUnit.DAYS.toMinutes(1), TimeUnit.MINUTES);
+                    st.unblockAll();
+
+                    // Удаление файлов логов pushEvent старше 30 дней
+                    try (Stream<Path> stream = Files.walk(Paths.get(ProjectProperty.getPushEventLogFolder()))
+                            .filter(path -> {
+                                if (Files.isRegularFile(path) && (path.toString().endsWith(".txt"))) {
+                                    try {
+                                        FileTime creationTime = (FileTime) Files.getAttribute(path, "lastModifiedTime");
+
+                                        return LocalDateTime.ofInstant(creationTime.toInstant(), ZoneId.systemDefault())
+                                                .isBefore(LocalDateTime.now().minusDays(30));
+                                    } catch (IOException e) {
+                                        return false;
+                                    }
+                                } else {
+                                    return false;
+                                }
+                            })) {
+                        stream.forEach(path -> {
+                            try {
+                                Files.delete(path);
+                            } catch (IOException e) {
+                                log.warning("error delete file " + path);
+                            }
+                        });
+                    } catch (IOException e) {
+                        log.warning("error walk files");
+                    }
+                }), midnight, TimeUnit.DAYS.toMinutes(1), TimeUnit.MINUTES);
+
+        // Сервис для резервирования логов статистики раз в час
+        hourFuture = service.scheduleAtFixedRate(() -> statistic.forEach((k, v) -> serialize(v)),
+                nextHour, TimeUnit.HOURS.toMinutes(1), TimeUnit.MINUTES);
+
+        // Сервис для автоматического снятия блокировок Ошибка сервера и Разрыв соединения. Раз в 20 минут.
+        future20Minute = service.scheduleAtFixedRate(() -> statistic.forEach((k, v) -> v.unblock(BlockType.SERVER_ERROR, BlockType.LINK_ERROR)),
+                nextHour + 5, 20, TimeUnit.MINUTES);
 
         log.info("Statistic service start");
         System.out.println("Сервис статистики запущен");
@@ -169,7 +212,9 @@ public class EchoSocketServer {
         InstantDataService.stopService();
 
         if (Objects.nonNull(service)) {
-            future.cancel(true);
+            dayFuture.cancel(true);
+            hourFuture.cancel(true);
+            future20Minute.cancel(true);
             service.shutdown();
         }
 
