@@ -2,14 +2,14 @@ package ru.tecon.server;
 
 import ru.tecon.*;
 import ru.tecon.beanInterface.LoadOPCRemote;
+import ru.tecon.controllerData.ControllerConfig;
 import ru.tecon.exception.MySocketException;
 import ru.tecon.model.DataModel;
 import ru.tecon.server.model.ParseDataModel;
 import ru.tecon.model.ValueModel;
-import ru.tecon.traffic.MonitorInputStream;
-import ru.tecon.traffic.MonitorOutputStream;
-import ru.tecon.traffic.Statistic;
+import ru.tecon.traffic.*;
 
+import javax.ejb.EJBException;
 import javax.naming.NamingException;
 import java.io.*;
 import java.net.Socket;
@@ -64,7 +64,7 @@ public class EchoThread extends Thread {
 
         while (true) {
             try {
-                // Читаем первые 2 байта в которых указанн размер сообщения
+                // Читаем первые 2 байта в которых указан размер сообщения
                 byte[] data = new byte[2];
                 if (in.read(data, 0, 2) != -1) {
                     LOG.info("Thread: " + this.getId() + " Message size: " + Arrays.toString(data));
@@ -104,6 +104,8 @@ public class EchoThread extends Thread {
 
                             ArrayList<DataModel> dataModels = opc.loadObjectParameters(serverName + '_' + objectName, serverName);
                             Collections.sort(dataModels);
+
+                            LOG.info("load parameters from db Thread: " + this.getId() + " objectName: " + objectName);
 
                             List<ParseDataModel> result = new ArrayList<>();
                             int messagesCount;
@@ -152,6 +154,8 @@ public class EchoThread extends Thread {
                                     return;
                             }
 
+                            LOG.info("message parsed Thread: " + this.getId() + " objectName: " + objectName);
+
                             Collections.sort(result);
 
                             dataModels.forEach(dataModel -> {
@@ -166,6 +170,8 @@ public class EchoThread extends Thread {
                             });
 
                             dataModels.removeIf(dataModel -> dataModel.getData().isEmpty());
+
+                            LOG.info("put data to db size: " + dataModels.size() + " Thread: " + this.getId() + " objectName: " + objectName);
 
                             opc.putDataWithCalculateIntegrator(dataModels);
 
