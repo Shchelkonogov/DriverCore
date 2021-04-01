@@ -74,7 +74,7 @@ public class EchoThread extends Thread {
                     data = new byte[size];
 
                     if (size == 0) {
-                        statistic.serverErrorBlock();
+                        statistic.block(BlockType.SERVER_ERROR);
 
                         socket.close();
                         LOG.warning("run Error read message Socket close! Thread: " + this.getId() +
@@ -97,7 +97,7 @@ public class EchoThread extends Thread {
                         case 3: {
                             if (!opc.checkObject(serverName + '_' + objectName, serverName)) {
                                 LOG.info("check object return false Thread: " + this.getId() + " objectName: " + objectName);
-                                statistic.linkedBlock();
+                                statistic.block(BlockType.LINKED);
                                 socket.close();
                                 return;
                             }
@@ -115,7 +115,7 @@ public class EchoThread extends Thread {
                                         messageConfirmSize = 2;
                                         messagesCount = parse(data, result, 2, protocolVersion);
                                     } catch (Exception e) {
-                                        statistic.serverErrorBlock();
+                                        statistic.block(BlockType.SERVER_ERROR);
 
                                         socket.close();
                                         LOG.warning("run Parse version 1 exception. Socket close! " + e.getMessage() +
@@ -134,7 +134,7 @@ public class EchoThread extends Thread {
 
                                         messagesCount = parse(data, result, 4 + markSize, protocolVersion);
                                     } catch (Exception e) {
-                                        statistic.serverErrorBlock();
+                                        statistic.block(BlockType.SERVER_ERROR);
 
                                         socket.close();
                                         LOG.warning("run Parse version 2 exception. Socket close! " + e.getMessage() +
@@ -144,7 +144,7 @@ public class EchoThread extends Thread {
                                     }
                                     break;
                                 default:
-                                    statistic.serverErrorBlock();
+                                    statistic.block(BlockType.SERVER_ERROR);
 
                                     socket.close();
                                     LOG.warning("run Unknown protocolVersion. Socket close! Data: " + Arrays.toString(data) +
@@ -211,7 +211,7 @@ public class EchoThread extends Thread {
                             break;
                         }
                         default: {
-                            statistic.serverErrorBlock();
+                            statistic.block(BlockType.SERVER_ERROR);
 
                             socket.close();
                             LOG.warning("run Unknown packageType. Socket close! Data: " + Arrays.toString(data) +
@@ -220,7 +220,7 @@ public class EchoThread extends Thread {
                         }
                     }
                 } else {
-                    statistic.serverErrorBlock();
+                    statistic.block(BlockType.LINK_ERROR);
 
                     socket.close();
                     LOG.warning("run Can`t read head of message Socket close! Thread: " + this.getId()
@@ -262,7 +262,7 @@ public class EchoThread extends Thread {
             out.write(getIdentificationFailureMessage());
             out.flush();
 
-            statistic.serverErrorBlock();
+            statistic.block(BlockType.SERVER_ERROR);
 
             socket.close();
             throw new MySocketException("Duration error");
@@ -293,7 +293,7 @@ public class EchoThread extends Thread {
                 out.write(getIdentificationFailureMessage());
                 out.flush();
 
-                statistic.linkedBlock();
+                statistic.block(BlockType.LINKED);
 
                 socket.close();
                 throw new MySocketException("identify failure");
@@ -304,7 +304,7 @@ public class EchoThread extends Thread {
             out.write(getIdentificationFailureMessage());
             out.flush();
 
-            statistic.serverErrorBlock();
+            statistic.block(BlockType.SERVER_ERROR);
 
             socket.close();
             throw new MySocketException("identify failure");

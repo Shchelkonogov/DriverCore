@@ -6,6 +6,7 @@ import ru.tecon.controllerData.ControllerConfig;
 import ru.tecon.exception.MyServerStartException;
 import ru.tecon.instantData.InstantDataService;
 import ru.tecon.jms.MessageReceiveService;
+import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.Event;
 import ru.tecon.traffic.Statistic;
 
@@ -72,12 +73,10 @@ public class EchoSocketServer {
 
         File[] files = new File(ProjectProperty.getStatisticSerFolder()).listFiles();
         if (files != null) {
-            for (File fileEntry : files) {
+            for (File fileEntry: files) {
                 if (!fileEntry.isDirectory()) {
                     String ip = fileEntry.getName().replaceFirst("[.][^.]+$", "").replaceAll("_", ".");
-                    Statistic st = new Statistic(ip, event);
-                    st.deserialize(fileEntry.toPath().toAbsolutePath().toString());
-                    statistic.put(ip, st);
+                    statistic.put(ip, deserialize(fileEntry.toPath().toAbsolutePath().toString()));
                 }
             }
         }
@@ -170,7 +169,7 @@ public class EchoSocketServer {
                 serverSocket.close();
                 statistic.forEach((k, v) -> {
                     v.close();
-                    v.serialize();
+                    serialize(v);
                 });
                 statistic.clear();
             }
@@ -215,5 +214,38 @@ public class EchoSocketServer {
 
     public static void setCloseApplication(boolean closeApplication) {
         EchoSocketServer.closeApplication = closeApplication;
+    }
+
+    /**
+     * Сериализация объекта статистики в файл
+     * @param statistic объект для сериализации
+     */
+    private static void serialize(Statistic statistic) {
+        try (ObjectOutputStream oos = new ObjectOutputStream(
+                new FileOutputStream(ProjectProperty.getStatisticSerFolder() + "/" + statistic.getIp().replaceAll("[.]", "_") + ".ser"))) {
+            oos.writeObject(statistic);
+        } catch (IOException e) {
+            log.log(Level.WARNING, "serialize error", e);
+        }
+    }
+
+    /**
+     * Десиреализация объекта статистики из файла
+     * @param path путь к файлу
+     * @return объект статистики или null если ошибка десиреализации
+     */
+    private static Statistic deserialize(String path) {
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
+
+            Statistic statistic = (Statistic) ois.readObject();
+            statistic.setEvent(event);
+            event.addItem(statistic);
+            statistic.update();
+
+            return statistic;
+        } catch (IOException | ClassNotFoundException e) {
+            log.log(Level.WARNING, "deserialize error", e);
+        }
+        return null;
     }
 }

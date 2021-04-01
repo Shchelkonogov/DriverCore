@@ -5,6 +5,7 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import ru.tecon.exception.MyServerStartException;
+import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.Event;
 import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.Statistic;
@@ -81,9 +82,9 @@ public class RootLayoutController {
 
             ContextMenu rowMenu = new ContextMenu();
             MenuItem blockItem = new MenuItem("блокировать");
-            blockItem.setOnAction(event1 -> tableView.getSelectionModel().getSelectedItem().setBlock(true));
+            blockItem.setOnAction(event1 -> tableView.getSelectionModel().getSelectedItem().block(BlockType.USER));
             MenuItem unblockItem = new MenuItem("разблокировать");
-            unblockItem.setOnAction(event1 -> tableView.getSelectionModel().getSelectedItem().setBlock(false));
+            unblockItem.setOnAction(event1 -> tableView.getSelectionModel().getSelectedItem().unblockAll());
             rowMenu.getItems().addAll(blockItem, unblockItem);
 
             row.contextMenuProperty().bind(

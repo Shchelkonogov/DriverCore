@@ -39,8 +39,6 @@ public class MonitorInputStream extends FilterInputStream {
         return nRead;
     }
 
-
-
     public void setStatistic(Statistic statistic) {
         this.statistic = statistic;
     }

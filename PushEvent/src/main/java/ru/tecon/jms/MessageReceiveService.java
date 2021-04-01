@@ -7,6 +7,7 @@ import ru.tecon.exception.MyServerStartException;
 import ru.tecon.instantData.InstantDataService;
 import ru.tecon.model.Command;
 import ru.tecon.server.EchoSocketServer;
+import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.Statistic;
 import weblogic.jndi.WLInitialContextFactory;
 
@@ -84,10 +85,10 @@ public class MessageReceiveService implements MessageListener {
                                 InstantDataService.uploadInstantData(command.getParameter("url"));
                                 break;
                             case "block":
-                                EchoSocketServer.getStatistic().get(command.getParameter("url")).setBlock(true);
+                                EchoSocketServer.getStatistic().get(command.getParameter("url")).block(BlockType.USER);
                                 break;
                             case "unblock":
-                                EchoSocketServer.getStatistic().get(command.getParameter("url")).setBlock(false);
+                                EchoSocketServer.getStatistic().get(command.getParameter("url")).unblockAll();
                                 break;
                             case "info":
                                 try {

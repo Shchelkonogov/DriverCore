@@ -10,157 +10,229 @@ import java.net.Socket;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.StringJoiner;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class Statistic {
+/**
+ * @author Maksim Shchelkonogov
+ */
+public class Statistic implements Serializable {
 
-    private static Logger log = Logger.getLogger(Statistic.class.getName());
+    private static final long serialVersionUID = 5218038278503278808L;
+
+    private static final Logger LOGGER = Logger.getLogger(Statistic.class.getName());
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
 
-    private StatisticSer statisticSer = new StatisticSer();
-    private Socket socket;
+    private String ip;
+    private String objectName;
 
-    private Event event;
+    private AtomicInteger socketCount = new AtomicInteger(0);
+    private AtomicInteger inputTraffic = new AtomicInteger(0);
+    private AtomicInteger outputTraffic = new AtomicInteger(0);
+    private AtomicInteger monthTraffic = new AtomicInteger(0);
+    private AtomicInteger inputTrafficReal = new AtomicInteger(0);
+    private AtomicInteger outputTrafficReal = new AtomicInteger(0);
+    private AtomicInteger monthTrafficReal = new AtomicInteger(0);
+
+    private LocalDateTime lastRequestTime = LocalDateTime.now();
+
+    private boolean informWebConsole;
+
+    private boolean block = false;
+    private Set<BlockType> blockTypes = new HashSet<>();
+
+    private boolean ignoreTraffic = false;
+
+    private transient Socket socket;
+
+    private transient Event event;
 
     public Statistic(String ip, Event event) {
         this(ip, event, true);
     }
 
-    public Statistic(String ip, Event event, boolean useRMI) {
-        statisticSer.setIp(ip);
-        statisticSer.setUseRMI(useRMI);
+    public Statistic(String ip, Event event, boolean informWebConsole) {
+        this.ip = ip;
+        this.informWebConsole = informWebConsole;
         this.event = event;
-        updateObjectName();
         if (event != null) {
             event.addItem(this);
         }
     }
 
     /**
-     * Метож выгружает имя объекта из базы
+     * Метод выгружает имя объекта из базы
      */
     public void updateObjectName() {
-        if (statisticSer.isUseRMI()) {
-            try {
-                statisticSer.setObjectName(Utils.loadRMI().loadObjectName(ProjectProperty.getServerName(),
-                        statisticSer.getIp()));
-            } catch (NamingException e) {
-                log.log(Level.WARNING, "RMI load error", e);
-            }
+        try {
+            objectName = Utils.loadRMI().loadObjectName(ProjectProperty.getServerName(), ip);
+            LOGGER.info("updated object name for ip: " + ip);
+            update();
+        } catch (NamingException e) {
+            LOGGER.log(Level.WARNING, "RMI load error", e);
         }
     }
 
+    /**
+     * Проверка открыт ли socket
+     * @return true - открыт, false - закрыт
+     */
+    public boolean isSocketOpen() {
+        return Objects.nonNull(socket) && !socket.isClosed();
+    }
+
+    /**
+     * Устанавливаем socket
+     * @param socket socket
+     */
     public void setSocket(Socket socket) {
         close();
-        statisticSer.getSocketCount().addAndGet(1);
+        socketCount.addAndGet(1);
         this.socket = socket;
         update();
     }
 
+    /**
+     * @return количество сокетов, которые открывал контроллер
+     */
     public int getSocketCount() {
-        return statisticSer.getSocketCount().get();
+        return socketCount.get();
     }
 
     /**
-     * Метод для сброса количества сокетов
+     * Сбрасывает количество сокетов, которые открывал контроллер.
+     * Если socket в данный момент открыт, то новое количество будет 1 иначе 0
      */
     public void clearSocketCount() {
         if ((socket == null) || socket.isClosed()) {
-            statisticSer.getSocketCount().set(0);
+            socketCount.set(0);
         } else {
-            statisticSer.getSocketCount().set(1);
+            socketCount.set(1);
         }
+        update();
     }
 
     /**
-     * Метод закрувает socket
+     * Закрытие открытого socket, если такой открыт в данный момент
      */
     public void close() {
         if ((socket != null) && !socket.isClosed()) {
             try {
                 socket.close();
             } catch (IOException e) {
-                log.log(Level.WARNING, "close socket error", e);
+                LOGGER.log(Level.WARNING, "close socket error", e);
             }
         }
     }
 
+    /**
+     * Метод увеличивает количество входящего трафика
+     * @param count количество байт на сколько надо увеличить трафик
+     */
     public void updateInputTraffic(int count) {
-        statisticSer.getInputTrafficReal().addAndGet(count);
-        statisticSer.getMonthTrafficReal().addAndGet(count);
+        inputTrafficReal.addAndGet(count);
+        monthTrafficReal.addAndGet(count);
 
-        statisticSer.getInputTraffic().addAndGet(roundTraffic(count));
-        statisticSer.getMonthTraffic().addAndGet(roundTraffic(count));
+        inputTraffic.addAndGet(roundTraffic(count));
+        monthTraffic.addAndGet(roundTraffic(count));
 
-        statisticSer.setLastRequestTime(LocalDateTime.now());
+        lastRequestTime = LocalDateTime.now();
 
         checkTraffic();
         update();
     }
 
+    /**
+     * Метод увеличивает количество исходящего трафика
+     * @param count количество байт на сколько надо увеличить трафик
+     */
     public void updateOutputTraffic(int count) {
-        statisticSer.getOutputTrafficReal().addAndGet(count);
-        statisticSer.getMonthTrafficReal().addAndGet(count);
+        outputTrafficReal.addAndGet(count);
+        monthTrafficReal.addAndGet(count);
 
-        statisticSer.getOutputTraffic().addAndGet(roundTraffic(count));
-        statisticSer.getMonthTraffic().addAndGet(roundTraffic(count));
+        outputTraffic.addAndGet(roundTraffic(count));
+        monthTraffic.addAndGet(roundTraffic(count));
 
-        statisticSer.setLastRequestTime(LocalDateTime.now());
+        lastRequestTime = LocalDateTime.now();
 
         checkTraffic();
         update();
     }
 
+    /**
+     * @return текстовое описание входящего трафика
+     */
     public String getInputTraffic() {
-        return Utils.humanReadableByteCountBin(statisticSer.getInputTraffic().get()) + " (" +
-                Utils.humanReadableByteCountBin(statisticSer.getInputTrafficReal().get()) + ")";
+        return Utils.humanReadableByteCountBin(inputTraffic.get()) + " (" +
+                Utils.humanReadableByteCountBin(inputTrafficReal.get()) + ")";
     }
 
+    /**
+     * @return текстовое описание исходящего трафика
+     */
     public String getOutputTraffic() {
-        return Utils.humanReadableByteCountBin(statisticSer.getOutputTraffic().get()) + " (" +
-                Utils.humanReadableByteCountBin(statisticSer.getOutputTrafficReal().get()) + ")";
+        return Utils.humanReadableByteCountBin(outputTraffic.get()) + " (" +
+                Utils.humanReadableByteCountBin(outputTrafficReal.get()) + ")";
     }
 
+    /**
+     * @return текстовое описание общего трафика
+     */
     public String getTraffic() {
-        return Utils.humanReadableByteCountBin(statisticSer.getInputTraffic().get() +
-                statisticSer.getOutputTraffic().get()) + " (" +
-                Utils.humanReadableByteCountBin(statisticSer.getInputTrafficReal().get() +
-                statisticSer.getOutputTrafficReal().get()) + ") из " +
-                Utils.humanReadableByteCountBin(ProjectProperty.getTrafficLimit());
+        return Utils.humanReadableByteCountBin(inputTraffic.get() + outputTraffic.get()) + " (" +
+                Utils.humanReadableByteCountBin(inputTrafficReal.get() + outputTrafficReal.get()) + ") из " +
+                (ignoreTraffic ? "no limit" : Utils.humanReadableByteCountBin(ProjectProperty.getTrafficLimit()));
     }
 
+    /**
+     * @return текстовое описание общего месячного трафика
+     */
     public String getMonthTraffic() {
-        return Utils.humanReadableByteCountBin(statisticSer.getMonthTraffic().get()) + " (" +
-                Utils.humanReadableByteCountBin(statisticSer.getMonthTrafficReal().get()) + ") из " +
-                Utils.humanReadableByteCountBin(ProjectProperty.getTrafficLimit() * LocalDate.now().lengthOfMonth());
+        return Utils.humanReadableByteCountBin(monthTraffic.get()) + " (" +
+                Utils.humanReadableByteCountBin(monthTrafficReal.get()) + ") из " +
+                (ignoreTraffic ? "no limit" : Utils.humanReadableByteCountBin(ProjectProperty.getTrafficLimit() * LocalDate.now().lengthOfMonth()));
     }
 
+    /**
+     * Проверка на привышение допустимого трафика,
+     * в случае превышение включается блокировка по трафику
+     */
     private void checkTraffic() {
-        if ((statisticSer.getInputTraffic().get() + statisticSer.getOutputTraffic().get()) > ProjectProperty.getTrafficLimit()) {
-            setBlock(true);
+        if (ignoreTraffic) {
+            return;
+        }
+        if ((inputTraffic.get() + outputTraffic.get()) > ProjectProperty.getTrafficLimit()) {
+            block(BlockType.TRAFFIC);
         }
     }
 
     /**
-     * Метод очищает суточный трафик
+     * Очистка суточного трафика
      */
     public void clearDayTraffic() {
-        statisticSer.getInputTrafficReal().set(0);
-        statisticSer.getOutputTrafficReal().set(0);
+        inputTrafficReal.set(0);
+        outputTrafficReal.set(0);
 
-        statisticSer.getInputTraffic().set(0);
-        statisticSer.getOutputTraffic().set(0);
-        setBlock(false);
+        inputTraffic.set(0);
+        outputTraffic.set(0);
+
+        update();
     }
 
     /**
-     * Метод очищает месячный трафик
+     * Очистка месячного трафика
      */
     public void clearMonthTraffic() {
-        statisticSer.getMonthTrafficReal().set(0);
-        statisticSer.getMonthTraffic().set(0);
+        monthTrafficReal.set(0);
+        monthTraffic.set(0);
+
+        update();
     }
 
     /**
@@ -173,65 +245,78 @@ public class Statistic {
     }
 
     public String getLastRequestTime() {
-        return statisticSer.getLastRequestTime() == null ? "" : statisticSer.getLastRequestTime().format(FORMATTER);
+        return lastRequestTime == null ? "" : lastRequestTime.format(FORMATTER);
     }
 
     public String getIp() {
-        return statisticSer.getIp();
+        return ip;
     }
 
     public String getObjectName() {
-        return statisticSer.getObjectName();
+        return objectName;
     }
 
-    public void setBlock(boolean block) {
-        statisticSer.setBlock(block);
-        if (block) {
-            close();
-        } else {
-            statisticSer.setLinkedBlock(false);
-            statisticSer.setServerErrorBlock(false);
-        }
+    public void block(BlockType blockType) {
+        block = true;
+        blockTypes.add(blockType);
+        close();
         update();
     }
 
-    public boolean isBlock() {
-        return statisticSer.isBlock();
+    /**
+     * @param blockType Снятие переданной блокировки
+     * @return статус блокировки объекта
+     */
+    public boolean unblock(BlockType... blockType) {
+        for (BlockType type: blockType) {
+            blockTypes.remove(type);
+        }
+
+        if (blockTypes.isEmpty() && block) {
+            block = false;
+            update();
+        }
+
+        return block;
     }
 
-    public String getBlockToString() {
-        if (isBlock()) {
-            if (statisticSer.isLinkedBlock()) {
-                return "не слинковано";
-            }
-            if (statisticSer.isServerErrorBlock()) {
-                return "ошибка сервера";
-            }
-            return "заблокировано";
-        } else {
-            return "свободно";
+    /**
+     * Снятие всех блокировок с объекта
+     */
+    public void unblockAll() {
+        if (block) {
+            block = false;
+            blockTypes.clear();
+            update();
         }
     }
 
-    public void linkedBlock() {
-        statisticSer.setLinkedBlock(true);
-        setBlock(true);
+    public boolean isBlock() {
+        return block;
     }
 
-    public void serverErrorBlock() {
-        statisticSer.setServerErrorBlock(true);
-        setBlock(true);
+    /**
+     * @return текстовое описание статуса блокировки
+     */
+    public String getBlockToString() {
+        StringJoiner result = new StringJoiner(", ");
+        result.setEmptyValue("свободно");
+        blockTypes.forEach(blockType -> result.add(blockType.getName()));
+        return result.toString();
     }
 
-    private void update() {
+    public void update() {
         if (event != null) {
             event.update();
         }
-        if (statisticSer.isUseRMI()) {
+        if (Objects.isNull(objectName) || objectName.equals("")) {
+            updateObjectName();
+        }
+        if (informWebConsole) {
             try {
                 Utils.loadRMI().uploadStatistic(getWebStatistic());
             } catch (NamingException e) {
-                log.log(Level.WARNING, "RMI load error", e);
+                LOGGER.log(Level.WARNING, "RMI load error", e);
             }
         }
     }
@@ -243,28 +328,42 @@ public class Statistic {
     }
 
     /**
-     * Метод сериализует данные статистики в файл
+     * Изменяем статус проверки по трафику
+     * @param ignoreTraffic true - игнорировать трафик, false - проверять трафик
      */
-    public void serialize() {
-        try (ObjectOutputStream oos = new ObjectOutputStream(
-                new FileOutputStream(ProjectProperty.getStatisticSerFolder() + "/" + getIp().replaceAll("[.]", "_") + ".ser"))) {
-            oos.writeObject(statisticSer);
-        } catch (IOException e) {
-            log.log(Level.WARNING, "serialize error", e);
+    public void setIgnoreTraffic(boolean ignoreTraffic) {
+        this.ignoreTraffic = ignoreTraffic;
+        if (ignoreTraffic) {
+            if (unblock(BlockType.TRAFFIC)) {
+                update();
+            }
+        } else {
+            checkTraffic();
         }
     }
 
-    /**
-     * Метод десериализует объект из фаула
-     * @param path путь к файлу
-     */
-    public void deserialize(String path) {
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
-            statisticSer = (StatisticSer) ois.readObject();
+    public void setEvent(Event event) {
+        this.event = event;
+    }
 
-            update();
-        } catch (IOException | ClassNotFoundException e) {
-            log.log(Level.WARNING, "deserialize error", e);
-        }
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", Statistic.class.getSimpleName() + "[", "]")
+                .add("ip='" + ip + "'")
+                .add("objectName='" + objectName + "'")
+                .add("socketCount=" + socketCount)
+                .add("inputTraffic=" + inputTraffic)
+                .add("outputTraffic=" + outputTraffic)
+                .add("monthTraffic=" + monthTraffic)
+                .add("inputTrafficReal=" + inputTrafficReal)
+                .add("outputTrafficReal=" + outputTrafficReal)
+                .add("monthTrafficReal=" + monthTrafficReal)
+                .add("lastRequestTime=" + lastRequestTime)
+                .add("informWebConsole=" + informWebConsole)
+                .add("block=" + block)
+                .add("blockTypes=" + blockTypes)
+                .add("ignoreTraffic=" + ignoreTraffic)
+                .add("socket=" + socket)
+                .toString();
     }
 }
