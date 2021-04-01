@@ -233,6 +233,18 @@ public class EchoThread extends Thread {
                             + " ObjectName: " + objectName);
                     return;
                 }
+            } catch (EJBException e) {
+                LOG.warning("Error with remote opc object");
+                try {
+                    socket.close();
+                } catch (IOException ex) {
+                    LOG.warning("EJBException when read messages Error: " + ex.getMessage() + " Thread: " + this.getId() +
+                            " ObjectName: " + objectName);
+                    return;
+                }
+                statistic.block(BlockType.SERVER_ERROR);
+
+                return;
             } catch (MySocketException e) {
                 LOG.warning("run My error " + e.getMessage() + " Thread: " + this.getId() + " objectName: " + objectName);
                 return;
