@@ -66,14 +66,20 @@ public class Statistic implements Serializable {
         }
     }
 
+    public void updateObjectName() {
+        updateObjectName(true);
+    }
+
     /**
      * Метод выгружает имя объекта из базы
      */
-    public void updateObjectName() {
+    private void updateObjectName(boolean update) {
         try {
             objectName = Utils.loadRMI().loadObjectName(ProjectProperty.getServerName(), ip);
             LOGGER.info("updated object name for ip: " + ip);
-            update();
+            if (update) {
+                update();
+            }
         } catch (NamingException e) {
             LOGGER.log(Level.WARNING, "RMI load error", e);
         }
@@ -318,7 +324,7 @@ public class Statistic implements Serializable {
             event.update();
         }
         if (Objects.isNull(objectName) || objectName.equals("")) {
-            updateObjectName();
+            updateObjectName(false);
         }
         if (informWebConsole) {
             try {
