@@ -240,9 +240,13 @@ public class EchoSocketServer {
         return statistic.get(ip);
     }
 
-    public static boolean isBlocked(String ip) {
+    private static boolean isBlocked(String ip) {
+        return isBlocked(ip, null);
+    }
+
+    public static boolean isBlocked(String ip, BlockType blockType) {
         Statistic st = statistic.get(ip);
-        return ((st != null) && st.isBlock());
+        return ((st != null) && st.isBlock(blockType));
     }
 
     public static ConcurrentMap<String, Statistic> getStatistic() {

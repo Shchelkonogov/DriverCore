@@ -291,8 +291,16 @@ public class Statistic implements Serializable {
         }
     }
 
-    public boolean isBlock() {
-        return block;
+    /**
+     * Проверка заблокирован ли объект.
+     * @param blockType тип блокировки, если передается null то проверяется общая блокировка
+     * @return статус блокировки объекта
+     */
+    public boolean isBlock(BlockType blockType) {
+        if (blockType == null) {
+            return block;
+        }
+        return blockTypes.contains(blockType);
     }
 
     /**
