@@ -6,6 +6,7 @@ import ru.tecon.isacom.*;
 import ru.tecon.model.DataModel;
 import ru.tecon.model.ValueModel;
 import ru.tecon.server.EchoSocketServer;
+import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.ControllerSocket;
 
 import javax.naming.NamingException;
@@ -75,7 +76,7 @@ public final class InstantDataService {
              InputStream in = socket.getInputStream();
              OutputStream out = socket.getOutputStream()) {
 
-            if (EchoSocketServer.isBlocked(url)) {
+            if (EchoSocketServer.isBlocked(url, BlockType.TRAFFIC)) {
                 LOG.info("traffic block");
                 Utils.loadRMI().errorExecuteAsyncRefreshCommand(errorPath, "Превышение трафика по объекту '" + errorPath + "'");
                 return;
@@ -143,7 +144,8 @@ public final class InstantDataService {
                             }
                             break;
                         case 5:
-                            // TODO реализовать вариант для String размер string указан в sysInfo
+                            // TODO Реализовать вариант для String размер string указан в sysInfo.
+                            //  Переменные типа String пока нигде не требуются.
                             break;
                     }
                 }

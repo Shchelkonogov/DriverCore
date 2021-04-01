@@ -6,6 +6,7 @@ import ru.tecon.Utils;
 import ru.tecon.isacom.*;
 import ru.tecon.model.ObjectInfoModel;
 import ru.tecon.server.EchoSocketServer;
+import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.ControllerSocket;
 import ru.tecon.traffic.MonitorInputStream;
 import ru.tecon.traffic.Statistic;
@@ -160,7 +161,7 @@ public final class ControllerConfig {
 
         Set<String> result = new HashSet<>();
 
-        if (EchoSocketServer.isBlocked(url)) {
+        if (EchoSocketServer.isBlocked(url, BlockType.TRAFFIC)) {
             LOG.info("traffic block");
             return result;
         }
