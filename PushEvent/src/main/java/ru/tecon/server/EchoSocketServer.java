@@ -201,6 +201,22 @@ public class EchoSocketServer {
      */
     public static void removeStatistic(String ip) {
         statistic.remove(ip);
+
+        // Удаление всех pushEvent логов
+        try (Stream<Path> walk = Files.walk(Paths.get(ProjectProperty.getPushEventLogFolder() + "/" + ip))) {
+            walk.sorted(Comparator.reverseOrder())
+                    .peek(path -> log.info("remove " + path))
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (IOException e) {
+                            log.warning("error remove file: " + path + " message: " + e.getMessage());
+                        }
+                    });
+        } catch (IOException e) {
+            log.warning("error remove push event logs for ip: " + ip + " message: " + e.getMessage());
+        }
+
         event.update();
     }
 
