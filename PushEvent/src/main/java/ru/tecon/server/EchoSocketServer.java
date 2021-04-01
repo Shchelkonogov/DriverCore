@@ -80,6 +80,15 @@ public class EchoSocketServer {
                 }
             }
         }
+
+        // Догружаю в статистику объекты, которые ранее передавали данные (по именам папок логов pushEvent)
+        // Требуется для защиты в случае утери логов.
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(ProjectProperty.getPushEventLogFolder()),
+                entry -> !statistic.keySet().contains(entry.getFileName().toString()))) {
+            stream.forEach(path -> getStatistic(path.getFileName().toString()).update());
+        } catch (IOException e) {
+            log.warning("error load statistic from pushEvent logs directory " + e.getMessage());
+        }
         log.info("controller config load");
         System.out.println("Конфигурация контроллера загружена");
 
