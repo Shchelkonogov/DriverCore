@@ -1,7 +1,9 @@
 package ru.tecon.servlet;
 
-import ru.tecon.WebSocketServer;
+import ru.tecon.ejb.WebConsoleBean;
+import ru.tecon.model.Command;
 
+import javax.ejb.EJB;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -10,7 +12,7 @@ import javax.servlet.http.HttpServletResponse;
 /**
  * Сервлет для загрузки конфигурации объектов.
  * Входные параметры serverName и url.
- * ServerName для того что бы по webSocket передать
+ * ServerName для того что бы по jms передать
  * запрос на нужный поключеннный клиент.
  * url для того что бы клиент знал по какому адресу живет прибор
  * для запроса от него конфигурации по мгновенным данным.
@@ -19,8 +21,15 @@ import javax.servlet.http.HttpServletResponse;
 @WebServlet(urlPatterns = "/loadConfig")
 public class LoadConfig extends HttpServlet {
 
+    @EJB
+    private WebConsoleBean webConsoleBean;
+
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) {
-        WebSocketServer.sendTo(req.getParameter("serverName"), "loadConfig " + req.getParameter("url"));
+        Command command = new Command("loadConfig");
+        command.addParameter("server", req.getParameter("serverName"));
+        command.addParameter("url", req.getParameter("url"));
+
+        webConsoleBean.produceMessage(command);
     }
 }
