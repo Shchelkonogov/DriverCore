@@ -22,6 +22,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 public class EchoThread extends Thread {
 
@@ -373,6 +374,7 @@ public class EchoThread extends Thread {
     }
 
     private int parse(byte[] data, List<ParseDataModel> parseDataModels, int startIndex, int protocolVersion) throws Exception {
+        Set<String> configNames = new HashSet<>();
         List<String> result = new ArrayList<>();
         List<Object> parseData;
 
@@ -546,6 +548,10 @@ public class EchoThread extends Thread {
                 List<String> parameters = ControllerConfig.getConfigNames(bufferNumber, eventCode, parseData.size());
 
                 if ((parameters != null) && (parameters.size() == parseData.size())) {
+                    configNames.addAll(parameters.stream()
+                            .map(s -> s.split(":")[0])
+                            .collect(Collectors.toSet()));
+
                     Map<String, Object> mapData = new HashMap<>();
 
                     for (int j = 0; j < parameters.size(); j++) {
@@ -561,12 +567,23 @@ public class EchoThread extends Thread {
             LOG.log(Level.WARNING, "IndexOutOfBoundsException:", e);
         }
 
+        // Проверяем существует ли директория для логов, создаем если такой нет
         String path = ProjectProperty.getPushEventLogFolder() + "/" + socket.getInetAddress().getHostAddress();
         if (!Files.exists(Paths.get(path))) {
             Files.createDirectory(Paths.get(path));
         }
 
-        Files.write(Paths.get(path + "/" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS")) + ".txt"), result);
+        String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS"));
+        // Сохраняем файл логов с данными
+        Files.write(Paths.get(path + "/" + currentTime + ".txt"), result);
+        // Создается или дописывается в существующий файл группы переданных данных
+        try (FileWriter fw = new FileWriter(path + "/" + ProjectProperty.PUSH_EVENT_LAST_CONFIG, true);
+             PrintWriter out = new PrintWriter(fw)) {
+            out.println(currentTime);
+            configNames.forEach(out::println);
+        } catch (IOException e) {
+            LOG.warning("error write lastConfigNames " + e.getMessage());
+        }
 
         return repeatCount;
     }

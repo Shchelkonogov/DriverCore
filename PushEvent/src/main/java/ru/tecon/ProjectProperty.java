@@ -35,6 +35,8 @@ public class ProjectProperty {
     public static final String SSH_PASSWORD = "tecon";
     public static final int SSH_PORT = 22;
 
+    public static final String PUSH_EVENT_LAST_CONFIG = "lastConfigNames.txt";
+
     /**
      * Метод выгружает конфигурацию из файла в себя
      * @param path путь к файлу конфигурации

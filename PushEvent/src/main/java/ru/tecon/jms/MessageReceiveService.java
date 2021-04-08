@@ -15,7 +15,11 @@ import javax.jms.*;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Hashtable;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -112,6 +116,17 @@ public class MessageReceiveService implements MessageListener {
                                 break;
                             case "remove":
                                 EchoSocketServer.removeStatistic(command.getParameter("url"));
+                                break;
+                            case "getLastConfigNames":
+                                try {
+                                    Set<String> logData = Files.readAllLines(Paths.get(ProjectProperty.getPushEventLogFolder() + "/" + command.getParameter("url") + "/" + ProjectProperty.PUSH_EVENT_LAST_CONFIG))
+                                            .stream()
+                                            .filter(s -> !s.matches("^\\d{2}-\\d{2}-\\d{4}_\\d{2}-\\d{2}-\\d{2}_\\d{3}$"))
+                                            .collect(Collectors.toSet());
+                                    Utils.loadRMI().uploadLogData(command.getParameter("sessionID"), logData);
+                                } catch (IOException | NamingException e) {
+                                    LOGGER.warning("error read log file for ip " + command.getParameter("url"));
+                                }
                                 break;
                         }
                     } else {

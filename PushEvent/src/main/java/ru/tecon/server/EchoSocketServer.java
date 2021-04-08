@@ -127,6 +127,14 @@ public class EchoSocketServer {
                     st.updateObjectName();
                     st.unblockAll();
 
+                    // Удаляем файл с последними переданными группами данных
+                    try {
+                        Files.deleteIfExists(Paths.get(ProjectProperty.getPushEventLogFolder() +
+                                "/" + s + "/" + ProjectProperty.PUSH_EVENT_LAST_CONFIG));
+                    } catch (IOException e) {
+                        log.warning("error remove last config file for " + s);
+                    }
+
                     // Удаление файлов логов pushEvent старше 30 дней
                     try (Stream<Path> stream = Files.walk(Paths.get(ProjectProperty.getPushEventLogFolder()))
                             .filter(path -> {
