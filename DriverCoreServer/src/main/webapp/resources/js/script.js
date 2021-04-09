@@ -12,16 +12,40 @@ jQuery(window).on('load', function () {
     connect();
 });
 
+var interval;
+
 function connect() {
     var ws = new WebSocket('ws://172.16.4.26:7001/DriverCore/ws/client');
+    // var ws = new WebSocket('ws://localhost:7001/DriverCore/ws/client');
 
     ws.onmessage = function(e) {
-        update([{name: 'json', value: e.data}]);
+        var split = e.data.toString().split(':');
+        if (split.length >= 2) {
+            var commandName = split[0];
+            var data = e.data.toString().replace(commandName + ':', '');
+            switch (commandName) {
+                case 'id':
+                    setID([{name: 'json', value: data}]);
+                    break;
+                case 'update':
+                    update([{name: 'json', value: data}]);
+                    break;
+                case 'info':
+                    updateInfo([{name: 'json', value: data}]);
+                    break;
+                case 'allStatistic':
+                    updateAll([{name: 'json', value: data}]);
+                    break;
+                case 'logData':
+                    setLogData([{name: 'json', value: data}]);
+                    break;
+            }
+        }
     };
 
     ws.onclose = function(e) {
         console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
-        // TODO Выводить сообщение что оборвалось соединение а не переподключаться
+        // Попытка единоразового переподключения через 1 секунду
         setTimeout(function() {
             connect();
         }, 1000);
@@ -32,6 +56,7 @@ function connect() {
         ws.close();
     };
 
-    setInterval(function(){
-        ws.send('ping message server')}, 25000)
+    clearInterval(interval);
+
+    interval = setInterval(function() {ws.send('ping message server');}, 25000);
 }

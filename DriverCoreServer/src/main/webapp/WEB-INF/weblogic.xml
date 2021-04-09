@@ -9,4 +9,8 @@
         <res-ref-name>jdbc/DataSourceUpload</res-ref-name>
         <jndi-name>jdbc/OracleDataSourceFil5</jndi-name>
     </resource-description>
+
+    <container-descriptor>
+        <prefer-web-inf-classes>true</prefer-web-inf-classes>
+    </container-descriptor>
 </weblogic-web-app>

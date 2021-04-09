@@ -19,3 +19,22 @@ body .ui-datatable .ui-datatable-data>tr>td {
 .text-center {
     text-align: center;
 }
+
+.ui-dialog-content {
+    padding: unset !important;
+}
+
+.ui-panel-content {
+    border: none !important;
+    padding: unset !important;
+}
+
+.ui-datatable-header, .ui-datatable-footer {
+    text-align: unset !important;
+}
+
+.footer-style {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}

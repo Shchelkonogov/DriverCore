@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="http://xmlns.jcp.org/jsf/html"
+      xmlns:ui="http://xmlns.jcp.org/jsf/facelets"
+      xmlns:f="http://xmlns.jcp.org/jsf/core"
+      xmlns:p="http://primefaces.org/ui">
+<h:head>
+    <title>Статистика серверов MFK1500</title>
+    <h:outputStylesheet name="style.css" library="css" />
+    <h:outputScript name="script.js?v=1.2" library="js" />
+</h:head>
+<h:body style="margin: 0;">
+    <h:form>
+        <p:remoteCommand name="update" action="#{statisticBean.update}" />
+        <p:remoteCommand name="updateAll" action="#{statisticBean.updateAll}" />
+        <p:remoteCommand name="setID" action="#{statisticBean.setID}" />
+        <p:remoteCommand name="updateInfo" update="dialogForm:infoTable"
+                         oncomplete="PF('bui').hide(); PF('writeButton').enable();"
+                         action="#{statisticBean.updateInfo}" />
+        <p:remoteCommand name="setLogData" update="dialogForm:logPanel"
+                         action="#{statisticBean.setLogData}" />
+        <p:remoteCommand name="updateFooter" update=":tableForm:table:footerText" />
+    </h:form>
+
+    <h:form id="tableForm" style="height: calc(100% - 5px); margin: 5px;">
+        <p:dataTable id="table" emptyMessage="Данных нет" var="rowData" value="#{statisticBean.tableData}"
+                     scrollable="true" scrollHeight="100%" sortBy="#{rowData.objectName}" sortOrder="ascending"
+                     selectionMode="single" selection="#{statisticBean.selectedRow}" rowIndexVar="rowIndex"
+                     filteredValue="#{statisticBean.filteredTableData}" widgetVar="tableWidget" rowKey="#{rowData.rowId}">
+            <p:columnGroup type="header">
+                <p:row>
+                    <p:column rowspan="2" headerText="№" width="40" />
+                    <p:column filterBy="#{rowData.serverName}" filterMatchMode="contains" sortBy="#{rowData.serverName}"
+                              rowspan="2" headerText="имя сервера" width="100" />
+                    <p:column filterBy="#{rowData.ip}" filterMatchMode="contains" sortBy="#{rowData.ip}"
+                              rowspan="2" headerText="ip адрес" width="100" />
+                    <p:column filterBy="#{rowData.objectName}" filterMatchMode="contains" sortBy="#{rowData.objectName}"
+                              rowspan="2" headerText="имя объекта" width="100" />
+                    <p:column rowspan="2" headerText="сокет" width="70" sortBy="#{rowData.socketCount}" />
+                    <p:column rowspan="2" headerText="статус" width="120" sortBy="#{rowData.status}" />
+                    <p:column rowspan="2" headerText="сеанс связи" width="150"/>
+                    <p:column colspan="4" headerText="трафик" width="540"/>
+                    <p:column rendered="#{statisticBean.admin}" rowspan="2" headerText="параметры" width="80"/>
+                </p:row>
+                <p:row>
+                    <p:column headerText="входящий" width="120" />
+                    <p:column headerText="исходящий" width="120" />
+                    <p:column headerText="общий суточный" width="150" />
+                    <p:column headerText="общий месячный" width="150" />
+                </p:row>
+            </p:columnGroup>
+
+            <p:column>
+                <h:outputText value="#{rowIndex + 1}" />
+            </p:column>
+
+            <p:column>
+                <h:outputText value="#{rowData.serverName}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText value="#{rowData.ip}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText id="objectNameValue" value="#{rowData.objectName}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText id="socketCountValue" value="#{rowData.socketCount}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText id="statusValue" value="#{rowData.status}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText id="lastRequestTimeValue" value="#{rowData.lastRequestTime}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText id="trafficInValue" value="#{rowData.trafficIn}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText id="trafficOutValue" value="#{rowData.trafficOut}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText id="trafficDayValue" value="#{rowData.trafficDay}" />
+            </p:column>
+
+            <p:column styleClass="text-center">
+                <h:outputText id="trafficMonthValue" value="#{rowData.trafficMonth}" />
+            </p:column>
+
+            <p:column rendered="#{statisticBean.admin}" styleClass="text-center">
+                <p:commandButton icon="pi pi-bars" onclick="PF('infoDialog').show(); PF('bui').show(); PF('writeButton').disable();"
+                                 action="#{statisticBean.requestInfo(rowData.ip, rowData.serverName)}"
+                                 update="dialogForm:infoTable dialogForm:dialogHeader" process="@this"/>
+            </p:column>
+
+            <f:facet name="footer">
+                <div class="footer-style">
+                    <div>
+                        Всего объектов:
+                        <h:outputText id="footerText" value="#{statisticBean.tableData.size()}" />
+                    </div>
+                    <div>
+                        <p:commandButton value="Выгрузка в Excel" icon="pi pi-upload" action="#{statisticBean.createReport}" ajax="false" />
+                    </div>
+                </div>
+            </f:facet>
+        </p:dataTable>
+
+        <p:contextMenu rendered="#{statisticBean.admin}" for="table">
+            <p:menuitem value="Блокировать" action="#{statisticBean.changeStatus(true)}"/>
+            <p:menuitem value="Разблокировать" action="#{statisticBean.changeStatus(false)}"/>
+            <p:menuitem value="Снять ограничение трафика" action="#{statisticBean.setIgnoreTraffic(true)}" />
+            <p:menuitem value="Вернуть ограничение трафика" action="#{statisticBean.setIgnoreTraffic(false)}" />
+            <p:menuitem value="Удалить" action="#{statisticBean.removeObject}" />
+            <p:menuitem value="Последние данные" onclick="PF('logDialog').show();"
+                        action="#{statisticBean.requestLog}"
+                        update="dialogForm:logPanel"/>
+        </p:contextMenu>
+    </h:form>
+
+    <h:form rendered="#{statisticBean.admin}" id="dialogForm">
+        <p:dialog widgetVar="infoDialog" width="500" height="200" modal="true">
+            <f:facet name="header">
+                <h:outputText id="dialogHeader" value="Системные параметры объекта #{statisticBean.serverName}:#{statisticBean.ip}"/>
+            </f:facet>
+
+            <p:panel id="panel" style="height: 100%;">
+                <p:dataTable id="infoTable" value="#{statisticBean.infoTableData}" var="infoData"
+                             editable="true" editMode="cell">
+                    <p:column headerText="имя">
+                        <h:outputText value="#{infoData.name}" />
+                    </p:column>
+                    <p:column headerText="значение">
+                        <p:cellEditor disabled="#{!infoData.write}">
+                            <f:facet name="output">
+                                <h:outputText value="#{infoData.value}" />
+                            </f:facet>
+                            <f:facet name="input">
+                                <p:inputText value="#{infoData.value}"/>
+                            </f:facet>
+                        </p:cellEditor>
+                    </p:column>
+                </p:dataTable>
+            </p:panel>
+
+            <f:facet name="footer">
+                <p:commandButton widgetVar="writeButton" value="Записать" action="#{statisticBean.writeValues}"
+                                 oncomplete="PF('infoDialog').hide();" />
+                <p:commandButton value="Синхронизировать время" action="#{statisticBean.synchronizeDate}"
+                                 oncomplete="PF('infoDialog').hide();" />
+            </f:facet>
+        </p:dialog>
+
+        <p:dialog header="Последние группы данных" widgetVar="logDialog" width="400" height="200" modal="true">
+            <p:panel id="logPanel" style="height: 100%;">
+                <ui:repeat value="#{statisticBean.lastDataGroups}" var="log">
+                    <div style="text-align: center;">#{log}</div>
+                </ui:repeat>
+            </p:panel>
+        </p:dialog>
+
+        <p:blockUI block="panel" widgetVar="bui">
+            Загрузка<br />
+            <h:graphicImage library="images" name="ajaxloadingbar.gif"/>
+        </p:blockUI>
+    </h:form>
+</h:body>
+</html>
