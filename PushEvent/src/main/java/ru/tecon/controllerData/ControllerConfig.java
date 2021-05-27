@@ -403,7 +403,7 @@ public final class ControllerConfig {
             for (String s: info.split(";")) {
                 String name = s.split(":")[0];
                 String value = s.split(":")[1];
-                if (ControllerSystemVariable.isContains(name)) {
+                if (ControllerSystemVariable.isContains(name) && value.matches("\\d*")) {
                     IsacomSimpleTypes simpleType = ControllerSystemVariable.valueOf(name).getType();
                     isacomModels.add(new IsacomModel(name, new IsacomType() {
                         @Override
