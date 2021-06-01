@@ -136,7 +136,7 @@ public class EchoSocketServer {
                     }
 
                     // Удаление файлов логов pushEvent старше 30 дней
-                    try (Stream<Path> stream = Files.walk(Paths.get(ProjectProperty.getPushEventLogFolder()))
+                    try (Stream<Path> stream = Files.walk(Paths.get(ProjectProperty.getPushEventLogFolder() + "/" + s))
                             .filter(path -> {
                                 if (Files.isRegularFile(path) && (path.toString().endsWith(".txt"))) {
                                     try {
