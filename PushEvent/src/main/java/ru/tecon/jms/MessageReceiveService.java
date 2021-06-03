@@ -45,7 +45,7 @@ public class MessageReceiveService implements MessageListener {
      * Обработчик ошибки jms подключения, пытается переподключиться раз в 30 секунд
      */
     private ExceptionListener listener = e -> {
-        LOGGER.warning("Connection to the Server has been lost, will retry in 30 seconds. " + e.getMessage());
+        LOGGER.log(Level.WARNING, "Connection to the Server has been lost, will retry in 30 seconds", e);
 
         ExecutorService service = Executors.newSingleThreadExecutor();
         service.submit(() -> {
