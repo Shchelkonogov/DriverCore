@@ -238,7 +238,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
      * второй параметр - ip прибора
      */
     private static final String SQL_GET_OBJECT_NAME = "select obj_name from obj_object " +
-            "where obj_id = (select id from opc_object where server_name = ? and item_name like ? and subscribed = 1)";
+            "where obj_id = (select id from opc_object where server_name = ? and item_name like ? escape '!' and subscribed = 1)";
 
     @Resource(name = "jdbc/DataSource")
     private DataSource ds;
@@ -762,7 +762,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
         try (Connection connect = ds.getConnection();
             PreparedStatement stm = connect.prepareStatement(SQL_GET_OBJECT_NAME)) {
             stm.setString(1, serverName);
-            stm.setString(2, "%" + ip + "%");
+            stm.setString(2, "%" + ip + "!_%");
 
             ResultSet res = stm.executeQuery();
             if (res.next()) {
