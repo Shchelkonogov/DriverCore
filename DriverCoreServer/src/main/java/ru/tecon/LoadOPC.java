@@ -249,6 +249,9 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     @Resource
     private EJBContext context;
 
+    @EJB
+    private WebConsoleBean webConsoleBean;
+
     @Override
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public void insertOPCObjects(List<String> objects, String serverName) {
@@ -349,7 +352,12 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                         stmUpdate.addBatch();
                     }
                     stmUpdate.executeBatch();
-                    WebSocketServer.sendTo(serverName, "loadConfig " + ip);
+
+                    Command command = new Command("loadConfig");
+                    command.addParameter("server", serverName);
+                    command.addParameter("url", ip);
+
+                    webConsoleBean.produceMessage(command);
                 } catch (SQLException e) {
                     LOG.log(Level.WARNING, "error while update status", e);
                 }
@@ -687,7 +695,12 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                         stmUpdate.addBatch();
                     }
                     stmUpdate.executeBatch();
-                    WebSocketServer.sendTo(serverName, "loadInstantData " + ip);
+
+                    Command command = new Command("loadInstantData");
+                    command.addParameter("server", serverName);
+                    command.addParameter("url", ip);
+
+                    webConsoleBean.produceMessage(command);
                 } catch (SQLException e) {
                     LOG.log(Level.WARNING, "error while update status", e);
                 }
