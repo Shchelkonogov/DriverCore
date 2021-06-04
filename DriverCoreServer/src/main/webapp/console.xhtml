@@ -22,6 +22,9 @@
                          action="#{statisticBean.updateInfo}" />
         <p:remoteCommand name="setLogData" update="dialogForm:logPanel"
                          action="#{statisticBean.setLogData}" />
+        <p:remoteCommand name="updateConfigNames" update="dialogForm:namesPanel"
+                         oncomplete="$('#dialogForm\\:logDialog').width('800'); PF('logDialog').initPosition();"
+                         action="#{statisticBean.updateConfigNames}" />
         <p:remoteCommand name="updateFooter" update=":tableForm:table:footerText" />
     </h:form>
 
@@ -123,8 +126,7 @@
             <p:menuitem value="Вернуть ограничение трафика" action="#{statisticBean.setIgnoreTraffic(false)}" />
             <p:menuitem value="Удалить" action="#{statisticBean.removeObject}" />
             <p:menuitem value="Последние данные" onclick="PF('logDialog').show();"
-                        action="#{statisticBean.requestLog}"
-                        update="dialogForm:logPanel"/>
+                        action="#{statisticBean.requestLog}"/>
         </p:contextMenu>
     </h:form>
 
@@ -161,11 +163,36 @@
             </f:facet>
         </p:dialog>
 
-        <p:dialog header="Последние группы данных" widgetVar="logDialog" width="400" height="200" modal="true">
-            <p:panel id="logPanel" style="height: 100%;">
-                <ui:repeat value="#{statisticBean.lastDataGroups}" var="log">
-                    <div style="text-align: center;">#{log}</div>
-                </ui:repeat>
+        <p:dialog id="logDialog" header="Последние группы данных за #{statisticBean.currentDate}" widgetVar="logDialog" width="400" height="210"
+                  modal="true" resizable="false">
+            <p:ajax event="close" listener="#{statisticBean.onClose}" update="dialogForm:logPanel"
+                    oncomplete="$('#dialogForm\\:logDialog').width('400'); PF('logDialog').initPosition();" />
+            <p:panel id="logPanel">
+                <div style="display: flex;">
+                    <div style="width: 395px; margin-right: 5px;">
+                        <p:dataTable value="#{statisticBean.lastDataGroups}" var="lastGroup" scrollable="true" scrollHeight="177"
+                                     selectionMode="single" selection="#{statisticBean.selectedLastDataGroup}"
+                                     rowKey="#{lastGroup.identifier}">
+                            <p:ajax event="rowSelect" listener="#{statisticBean.onRowSelect}" />
+                            <p:column headerText="Идентификатор группы">
+                                <h:outputText value="#{lastGroup.groupName}" />
+                            </p:column>
+                            <p:column headerText="Кол-во пакетов" width="120" style="text-align: center;">
+                                <h:outputText value="#{lastGroup.count}" />
+                            </p:column>
+                        </p:dataTable>
+                    </div>
+                    <p:panel id="namesPanel">
+                        <h:outputText rendered="#{statisticBean.configNames.size() != 0}"
+                                      value="#{statisticBean.selectedLastDataGroupName}"
+                                      style="font-weight: bold; vertical-align: middle;"/>
+                        <p:scrollPanel rendered="#{statisticBean.configNames.size() != 0}" id="configNamesPanel" style="width: 395px; height: 178px;">
+                            <ui:repeat value="#{statisticBean.configNames}" var="log">
+                                <div style="text-align: center;">#{log}</div>
+                            </ui:repeat>
+                        </p:scrollPanel>
+                    </p:panel>
+                </div>
             </p:panel>
         </p:dialog>
 

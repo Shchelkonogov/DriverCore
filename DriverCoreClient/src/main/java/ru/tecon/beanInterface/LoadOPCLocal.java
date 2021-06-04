@@ -125,15 +125,16 @@ public interface LoadOPCLocal {
     void errorExecuteAsyncRefreshCommand(String path, String message);
 
     /**
-     * Метод на запрос статистики от подключенных серверов
+     * Метод выгружает на сервер статистику
+     * @param statistic статистика
      */
-    void requestStatistic();
+    Future<Void> uploadStatistic(WebStatistic statistic);
 
     /**
      * Метод выгружает на сервер статистику
      * @param statistic статистика
      */
-    Future<Void> uploadStatistic(WebStatistic statistic);
+    Future<Void> uploadStatistic(String sessionID, List<WebStatistic> statistic);
 
     /**
      * Метод определяет возвращает имя объекта в системе по имени сервера и ip прибора
@@ -142,13 +143,4 @@ public interface LoadOPCLocal {
      * @return имя объекта
      */
     String loadObjectName(String serverName, String ip);
-
-    /**
-     * Метод отправляет сообщение на изменение статуса обеъекта
-     * Блокирует его или разблокирует
-     * @param serverName имя сервера
-     * @param ip ip прибора
-     * @param status статус
-     */
-    void changeStatus(String serverName, String ip, boolean status);
 }

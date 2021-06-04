@@ -120,6 +120,7 @@ public class EchoSocketServer {
                 statistic.forEach((s, st) -> {
                     st.close();
                     st.clearSocketCount();
+                    st.clearLastDayDataGroups();
                     st.clearDayTraffic();
                     if (LocalDate.now().getDayOfMonth() == 1) {
                         st.clearMonthTraffic();

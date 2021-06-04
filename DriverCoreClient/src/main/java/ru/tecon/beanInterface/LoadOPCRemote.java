@@ -1,6 +1,8 @@
 package ru.tecon.beanInterface;
 
 import ru.tecon.model.DataModel;
+import ru.tecon.driverCoreClient.model.LastData;
+import ru.tecon.model.ObjectInfoModel;
 import ru.tecon.model.WebStatistic;
 
 import javax.ejb.Remote;
@@ -125,15 +127,31 @@ public interface LoadOPCRemote {
     void errorExecuteAsyncRefreshCommand(String path, String message);
 
     /**
-     * Метод на запрос статистики от подключенных серверов
-     */
-    void requestStatistic();
-
-    /**
      * Метод выгружает на сервер статистику
      * @param statistic статистика
      */
     Future<Void> uploadStatistic(WebStatistic statistic);
+
+    /**
+     * Метод выгружает на сервер статистику
+     * @param sessionID id сессии
+     * @param statistic статистика
+     */
+    Future<Void> uploadStatistic(String sessionID, List<WebStatistic> statistic);
+
+    /**
+     * Метод выгружает на сервер последние переданные данные от MFK1500
+     * @param sessionID id сессии
+     * @param logData последние данные
+     */
+    Future<Void> uploadLogData(String sessionID, List<LastData> logData);
+
+    /**
+     * Метод выгружает на сервер инвормацию по параметрам группы
+     * @param sessionID id сессии
+     * @param configNames список параметров
+     */
+    Future<Void> uploadConfigNames(String sessionID, List<String> configNames);
 
     /**
      * Метод определяет возвращает имя объекта в системе по имени сервера и ip прибора
@@ -144,11 +162,9 @@ public interface LoadOPCRemote {
     String loadObjectName(String serverName, String ip);
 
     /**
-     * Метод отправляет сообщение на изменение статуса обеъекта
-     * Блокирует его или разблокирует
-     * @param serverName имя сервера
-     * @param ip ip прибора
-     * @param status статус
+     * Метод выгружает информацию клиентам
+     * @param sessionID id сессии
+     * @param info информация
      */
-    void changeStatus(String serverName, String ip, boolean status);
+    void sendInfo(String sessionID, List<ObjectInfoModel> info);
 }

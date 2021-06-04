@@ -2,6 +2,8 @@ package ru.tecon.traffic;
 
 import ru.tecon.ProjectProperty;
 import ru.tecon.Utils;
+import ru.tecon.controllerData.ControllerConfig;
+import ru.tecon.driverCoreClient.model.LastData;
 import ru.tecon.model.WebStatistic;
 
 import javax.naming.NamingException;
@@ -10,15 +12,14 @@ import java.net.Socket;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashSet;
-import java.util.Objects;
-import java.util.Set;
-import java.util.StringJoiner;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
+ * Класс статистики работы сервера MFK1500
  * @author Maksim Shchelkonogov
  */
 public class Statistic implements Serializable {
@@ -48,6 +49,8 @@ public class Statistic implements Serializable {
     private Set<BlockType> blockTypes = new HashSet<>();
 
     private boolean ignoreTraffic = false;
+
+    private Map<String, AtomicInteger> lastDayData = new HashMap<>();
 
     private transient Socket socket;
 
@@ -360,6 +363,63 @@ public class Statistic implements Serializable {
         this.event = event;
     }
 
+    /**
+     * Метод добавляет статистику по последним пришедшим данным от контроллера.
+     * Добавляется информации о конфигурации группы переданных данных
+     */
+    public void addData(int bufferNumber, int eventCode, int size) {
+        String configGroupIdentifier = bufferNumber + ":" + eventCode + ":" + size;
+
+        if (lastDayData == null) {
+            lastDayData = new HashMap<>();
+        }
+
+        if (lastDayData.containsKey(configGroupIdentifier)) {
+            lastDayData.get(configGroupIdentifier).addAndGet(1);
+        } else {
+            lastDayData.put(configGroupIdentifier, new AtomicInteger(1));
+        }
+    }
+
+    /**
+     * @return список последних переданных групп данных
+     */
+    public List<LastData> getLastDayDataGroups() {
+        List<LastData> lastDayDataGroups = new ArrayList<>();
+
+        LOGGER.info("last day group data is: " + lastDayData);
+
+        if (Objects.nonNull(lastDayData)) {
+            lastDayData.forEach((key, value) -> {
+                String[] split = key.split(":");
+                int bufferNumber = Integer.parseInt(split[0]);
+                int eventCode = Integer.parseInt(split[1]);
+                int size = Integer.parseInt(split[2]);
+
+                lastDayDataGroups.add(
+                        new LastData(key,
+                                String.join("/", ControllerConfig.getConfigNames(bufferNumber, eventCode, size)
+                                        .stream()
+                                        .map(param -> param.split(":")[0])
+                                        .collect(Collectors.toSet())),
+                                value.get()));
+            });
+        }
+
+        return lastDayDataGroups;
+    }
+
+    /**
+     * Метод очищает информацию о последних группах
+     */
+    public void clearLastDayDataGroups() {
+        if (Objects.nonNull(lastDayData)) {
+            lastDayData.clear();
+        } else {
+            lastDayData = new HashMap<>();
+        }
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", Statistic.class.getSimpleName() + "[", "]")
@@ -378,6 +438,7 @@ public class Statistic implements Serializable {
                 .add("blockTypes=" + blockTypes)
                 .add("ignoreTraffic=" + ignoreTraffic)
                 .add("socket=" + socket)
+                .add("lastDayData=" + lastDayData)
                 .toString();
     }
 }

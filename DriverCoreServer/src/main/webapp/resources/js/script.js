@@ -39,6 +39,9 @@ function connect() {
                 case 'logData':
                     setLogData([{name: 'json', value: data}]);
                     break;
+                case 'configNames':
+                    updateConfigNames([{name: 'json', value: data}]);
+                    break;
             }
         }
     };

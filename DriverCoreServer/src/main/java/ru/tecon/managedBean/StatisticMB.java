@@ -2,6 +2,8 @@ package ru.tecon.managedBean;
 
 import org.apache.poi.ss.usermodel.Workbook;
 import org.primefaces.PrimeFaces;
+import org.primefaces.event.SelectEvent;
+import ru.tecon.driverCoreClient.model.LastData;
 import ru.tecon.ejb.WebConsoleBean;
 import ru.tecon.model.Command;
 import ru.tecon.model.ObjectInfoModel;
@@ -21,6 +23,8 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -48,7 +52,10 @@ public class StatisticMB implements Serializable {
     private String ip;
     private String serverName;
 
-    private List<String> lastDataGroups = new ArrayList<>();
+    private List<LastData> lastDataGroups = new ArrayList<>();
+    private LastData selectedLastDataGroup;
+
+    private List<String> configNames = new ArrayList<>();
 
     @EJB
     private WebConsoleBean webConsoleBean;
@@ -162,7 +169,17 @@ public class StatisticMB implements Serializable {
         String info = FacesContext.getCurrentInstance().getExternalContext().getRequestParameterMap().get("json");
 
         Jsonb json = JsonbBuilder.create();
-        lastDataGroups = json.fromJson(info, new ArrayList<String>(){}.getClass().getGenericSuperclass());
+        lastDataGroups = json.fromJson(info, new ArrayList<LastData>(){}.getClass().getGenericSuperclass());
+    }
+
+    /**
+     * Метод обновляет список параметров группы данных
+     */
+    public void updateConfigNames() {
+        String info = FacesContext.getCurrentInstance().getExternalContext().getRequestParameterMap().get("json");
+
+        Jsonb json = JsonbBuilder.create();
+        configNames = json.fromJson(info, new ArrayList<String>(){}.getClass().getGenericSuperclass());
     }
 
     /**
@@ -265,14 +282,38 @@ public class StatisticMB implements Serializable {
      * Обработка запроса на выгрузку последних переданных груп данных от контроллера
      */
     public void requestLog() {
-        lastDataGroups.clear();
-
         Command command = new Command("getLastConfigNames");
         command.addParameter("server", selectedRow.getServerName());
         command.addParameter("url", selectedRow.getIp());
         command.addParameter("sessionID", sessionID);
 
         webConsoleBean.produceMessage(command);
+    }
+
+    /**
+     * Обработка выбора строки в таблице последних групп данных
+     * @param event информация о выбранной строке
+     */
+    public void onRowSelect(SelectEvent<LastData> event) {
+        String[] split = event.getObject().getIdentifier().split(":");
+
+        Command command = new Command("getConfigGroup");
+        command.addParameter("server", selectedRow.getServerName());
+        command.addParameter("sessionID", sessionID);
+        command.addParameter("bufferNumber", split[0]);
+        command.addParameter("eventCode", split[1]);
+        command.addParameter("size", split[2]);
+
+        webConsoleBean.produceMessage(command);
+    }
+
+    /**
+     * Метод обрабатывает закрытие dialog окна последние данные
+     */
+    public void onClose() {
+        selectedLastDataGroup = null;
+        lastDataGroups.clear();
+        configNames.clear();
     }
 
     /**
@@ -356,6 +397,10 @@ public class StatisticMB implements Serializable {
         }
     }
 
+    public List<String> getConfigNames() {
+        return configNames;
+    }
+
     public List<ObjectInfoModel> getInfoTableData() {
         return infoTableData;
     }
@@ -372,7 +417,7 @@ public class StatisticMB implements Serializable {
         return admin;
     }
 
-    public List<String> getLastDataGroups() {
+    public List<LastData> getLastDataGroups() {
         return lastDataGroups;
     }
 
@@ -394,5 +439,21 @@ public class StatisticMB implements Serializable {
 
     public void setSelectedRow(WebStatistic selectedRow) {
         this.selectedRow = selectedRow;
+    }
+
+    public LastData getSelectedLastDataGroup() {
+        return selectedLastDataGroup;
+    }
+
+    public void setSelectedLastDataGroup(LastData selectedLastDataGroup) {
+        this.selectedLastDataGroup = selectedLastDataGroup;
+    }
+
+    public String getSelectedLastDataGroupName() {
+        return selectedLastDataGroup.getGroupName();
+    }
+
+    public String getCurrentDate() {
+        return LocalDate.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
     }
 }

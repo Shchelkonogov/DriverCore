@@ -3,9 +3,10 @@ package ru.tecon;
 import oracle.jdbc.OracleConnection;
 import ru.tecon.beanInterface.LoadOPCLocal;
 import ru.tecon.beanInterface.LoadOPCRemote;
-import ru.tecon.model.DataModel;
-import ru.tecon.model.ValueModel;
-import ru.tecon.model.WebStatistic;
+import ru.tecon.driverCoreClient.model.LastData;
+import ru.tecon.ejb.WebConsoleBean;
+import ru.tecon.model.*;
+import ru.tecon.webSocket.WebSocketServer;
 
 import javax.annotation.Resource;
 import javax.ejb.*;
@@ -13,8 +14,8 @@ import javax.json.bind.Jsonb;
 import javax.json.bind.JsonbBuilder;
 import javax.sql.DataSource;
 import java.math.BigDecimal;
-import java.sql.*;
 import java.sql.Date;
+import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -489,8 +490,6 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
         return paramList;
     }
 
-    // TODO Как то проверить работу асинхронного метода, похоже он так не работает, и возможно сделать два
-    //  метода один синхронный один асинхронный. Для разгузки данных по pushEvent нужен синхронный метод
     @Override
     @Asynchronous
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
@@ -750,23 +749,34 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     }
 
     @Override
-    public void requestStatistic() {
-        WebSocketServer.sendAll("requestStatistic");
+    @Asynchronous
+    public Future<Void> uploadStatistic(WebStatistic statistic) {
+        Jsonb json = JsonbBuilder.create();
+        WebSocketServer.sendAllClients("update:" + json.toJson(statistic));
+        return null;
     }
 
     @Override
     @Asynchronous
-    public Future<Void> uploadStatistic(WebStatistic statistic) {
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-
+    public Future<Void> uploadStatistic(String sessionID, List<WebStatistic> statistic) {
         Jsonb json = JsonbBuilder.create();
-        System.out.println(json.toJson(statistic));
-        WebSocketServer.sendAllClients(json.toJson(statistic));
+        WebSocketServer.sendToClient(sessionID, "allStatistic:" + json.toJson(statistic));
+        return null;
+    }
 
+    @Override
+    @Asynchronous
+    public Future<Void> uploadLogData(String sessionID, List<LastData> logData) {
+        Jsonb json = JsonbBuilder.create();
+        WebSocketServer.sendToClient(sessionID, "logData:" + json.toJson(logData));
+        return null;
+    }
+
+    @Override
+    @Asynchronous
+    public Future<Void> uploadConfigNames(String sessionID, List<String> configNames) {
+        Jsonb json = JsonbBuilder.create();
+        WebSocketServer.sendToClient(sessionID, "configNames:" + json.toJson(configNames));
         return null;
     }
 
@@ -788,12 +798,10 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     }
 
     @Override
-    public void changeStatus(String serverName, String ip, boolean status) {
-        if (status) {
-            WebSocketServer.sendTo(serverName, "block " + ip);
-        } else {
-            WebSocketServer.sendTo(serverName, "unblock " + ip);
-        }
+    @Asynchronous
+    public void sendInfo(String sessionID, List<ObjectInfoModel> info) {
+        Jsonb json = JsonbBuilder.create();
+        WebSocketServer.sendToClient(sessionID, "info:" + json.toJson(info));
     }
 
     /**
