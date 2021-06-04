@@ -18,10 +18,14 @@ public class WebStatistic implements Serializable {
     private String trafficDay;
     private String trafficMonth;
 
+    public WebStatistic() {
+        rowId = UUID.randomUUID().toString();
+    }
+
     public WebStatistic(String serverName, String ip, String objectName, String socketCount,
                         String status, String lastRequestTime, String trafficIn, String trafficOut, String trafficDay,
                         String trafficMonth) {
-        rowId = UUID.randomUUID().toString();
+        this();
         this.serverName = serverName;
         this.ip = ip;
         this.objectName = objectName;
@@ -78,6 +82,10 @@ public class WebStatistic implements Serializable {
         return rowId;
     }
 
+    public void setIp(String ip) {
+        this.ip = ip;
+    }
+
     public void setSocketCount(String socketCount) {
         this.socketCount = socketCount;
     }
@@ -117,6 +125,7 @@ public class WebStatistic implements Serializable {
     @Override
     public String toString() {
         return new StringJoiner(", ", WebStatistic.class.getSimpleName() + "[", "]")
+                .add("rowId='" + rowId + "'")
                 .add("serverName='" + serverName + "'")
                 .add("ip='" + ip + "'")
                 .add("objectName='" + objectName + "'")
