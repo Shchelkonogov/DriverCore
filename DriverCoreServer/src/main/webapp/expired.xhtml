@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="http://xmlns.jcp.org/jsf/html"
+      xmlns:ui="http://xmlns.jcp.org/jsf/facelets"
+      xmlns:f="http://xmlns.jcp.org/jsf/core"
+      xmlns:p="http://primefaces.org/ui">
+<head>
+    <title>Сессия устарела</title>
+    <link rel="shortcut icon" type="image/x-icon" href="#{resource['images/logo.png']}"/>
+    <meta http-equiv="refresh" content="5;url=#{request.contextPath}/console" />
+</head>
+<body>
+    <div style="text-align: center;">
+        <h1>Сессия устарела</h1>
+        <h3>Вы будете перенаправлены на страницу статистики</h3>
+        <p><a href="#{request.contextPath}/console">Нажмите здесь, если перенаправление не сработало или вы нетерпеливы</a>.</p>
+    </div>
+</body>
+</html>
