@@ -42,7 +42,7 @@ public class WebSocketServer {
      * @param message сообщение
      */
     public static void sendAllClients(String message) {
-        LOG.info("sendTo message: " + message);
+        LOG.info("sendTo message: " + (message.length() > 100 ? message.substring(0, 100) + "..." : message));
         synchronized (CLIENT_SESSIONS) {
             for (Session session: CLIENT_SESSIONS) {
                 if (session.isOpen()) {
@@ -58,7 +58,7 @@ public class WebSocketServer {
      * @param message сообщение
      */
     public static void sendToClient(String sessionID, String message) {
-        LOG.info("sendTo message: " + message + " to: " + sessionID);
+        LOG.info("sendTo message: " + (message.length() > 100 ? message.substring(0, 100) + "..." : message) + " to: " + sessionID);
         synchronized (CLIENT_SESSIONS) {
             for (Session session: CLIENT_SESSIONS) {
                 if (session.getId().equals(sessionID) && session.isOpen()) {
