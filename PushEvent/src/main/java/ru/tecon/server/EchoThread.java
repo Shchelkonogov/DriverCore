@@ -252,6 +252,17 @@ public class EchoThread extends Thread {
             } catch (IOException e) {
                 LOG.warning("run Error when read messages Error: " + e.getMessage() + " Thread: " + this.getId() +
                         " ObjectName: " + objectName);
+
+                // Иногда возникает ошибка Read timed out и в этом случае похоже socket не закрывается
+                if (!socket.isClosed()) {
+                    try {
+                        socket.close();
+                    } catch (IOException ex) {
+                        LOG.warning("EJBException when read messages Error: " + ex.getMessage() + " Thread: " + this.getId() +
+                                " ObjectName: " + objectName);
+                        return;
+                    }
+                }
                 return;
             }
         }
