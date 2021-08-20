@@ -49,6 +49,7 @@ public class EchoSocketServer {
     private static boolean closeApplication = true;
 
     private static Event event;
+    private static ServiceLoadListener serviceLoadListener;
 
     public static void main(String[] args) {
         try {
@@ -65,6 +66,10 @@ public class EchoSocketServer {
         ProjectProperty.loadProperties(args[0]);
         log.info("project properties load");
         System.out.println("Конфигурация приложения загружена");
+
+        if (serviceLoadListener != null) {
+            serviceLoadListener.onLoad();
+        }
 
         // Парсим файл конфигурации
         try {
@@ -338,5 +343,9 @@ public class EchoSocketServer {
             log.log(Level.WARNING, "deserialize error", e);
         }
         return null;
+    }
+
+    public static void addServiceLoadListener(ServiceLoadListener serviceLoadListener) {
+        EchoSocketServer.serviceLoadListener = serviceLoadListener;
     }
 }

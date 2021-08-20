@@ -1,16 +1,21 @@
 package ru.tecon.controller;
 
+import javafx.application.Platform;
 import javafx.beans.binding.Bindings;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.stage.Stage;
+import ru.tecon.ProjectProperty;
 import ru.tecon.exception.MyServerStartException;
+import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.Event;
-import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.Statistic;
 
 public class RootLayoutController {
+
+    private Stage primaryStage;
 
     private Event event = new Event() {
         @Override
@@ -95,6 +100,7 @@ public class RootLayoutController {
         });
 
         EchoSocketServer.setEvent(event);
+        EchoSocketServer.addServiceLoadListener(() -> Platform.runLater(() -> primaryStage.setTitle("Сервер MFK1500 (" + ProjectProperty.getServerName() + ")")));
         EchoSocketServer.setCloseApplication(false);
     }
 
@@ -151,4 +157,8 @@ public class RootLayoutController {
 //            thread.start();
 //        }
 //    }
+
+    public void setPrimaryStage(Stage primaryStage) {
+        this.primaryStage = primaryStage;
+    }
 }

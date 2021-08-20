@@ -6,6 +6,7 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
 import ru.tecon.controller.LogStage;
+import ru.tecon.controller.RootLayoutController;
 import ru.tecon.server.EchoSocketServer;
 
 import java.io.IOException;
@@ -21,7 +22,11 @@ public class MainApp extends Application {
 
     @Override
     public void start(Stage primaryStage) throws IOException {
-        Parent root = FXMLLoader.load(getClass().getResource("/fx/RootLayout.fxml"));
+        FXMLLoader loader = new FXMLLoader(getClass().getResource("/fx/RootLayout.fxml"));
+        Parent root = loader.load();
+
+        RootLayoutController controller = loader.getController();
+        controller.setPrimaryStage(primaryStage);
 
         primaryStage.setTitle("Сервер MFK1500");
         primaryStage.setScene(new Scene(root, 1300, 600));
