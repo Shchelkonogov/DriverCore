@@ -17,6 +17,7 @@ public class WebStatistic implements Serializable {
     private String trafficOut;
     private String trafficDay;
     private String trafficMonth;
+    private boolean closed = false;
 
     public WebStatistic() {
         rowId = UUID.randomUUID().toString();
@@ -122,6 +123,18 @@ public class WebStatistic implements Serializable {
         this.objectName = objectName;
     }
 
+    public boolean isClosed() {
+        return closed;
+    }
+
+    public void setClosed(boolean closed) {
+        this.closed = closed;
+    }
+
+    public String getColor() {
+        return closed ? "red" : "green";
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", WebStatistic.class.getSimpleName() + "[", "]")
@@ -136,6 +149,7 @@ public class WebStatistic implements Serializable {
                 .add("trafficOut='" + trafficOut + "'")
                 .add("trafficDay='" + trafficDay + "'")
                 .add("trafficMonth='" + trafficMonth + "'")
+                .add("closed=" + closed)
                 .toString();
     }
 }

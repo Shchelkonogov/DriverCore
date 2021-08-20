@@ -349,9 +349,11 @@ public class Statistic implements Serializable {
     }
 
     public WebStatistic getWebStatistic() {
-        return new WebStatistic(ProjectProperty.getServerName(), getIp(), getObjectName(),
+        WebStatistic statistic = new WebStatistic(ProjectProperty.getServerName(), getIp(), getObjectName(),
                 String.valueOf(getSocketCount()), getBlockToString(), getLastRequestTime(),
                 getInputTraffic(), getOutputTraffic(), getTraffic(), getMonthTraffic());
+        statistic.setClosed(!isSocketOpen());
+        return statistic;
     }
 
     /**

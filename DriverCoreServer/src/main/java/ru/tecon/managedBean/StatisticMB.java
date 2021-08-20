@@ -340,8 +340,9 @@ public class StatisticMB implements Serializable {
                     filter = true;
                 }
 
-                if (!tableDatum.getSocketCount().equals(st.getSocketCount())) {
+                if (!tableDatum.getSocketCount().equals(st.getSocketCount()) || (tableDatum.isClosed() != st.isClosed())) {
                     tableDatum.setSocketCount(st.getSocketCount());
+                    tableDatum.setClosed(st.isClosed());
                     update.add("tableForm:table:" + index + ":socketCountValue");
                     filter = true;
                 }
