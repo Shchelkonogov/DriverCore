@@ -82,7 +82,7 @@ public class MessageReceiveService implements MessageListener {
                                 ControllerConfig.uploadConfig(command.getParameter("url"));
                                 break;
                             case "loadInstantData":
-                                InstantDataService.uploadInstantData(command.getParameter("url"));
+                                InstantDataService.uploadInstantData(command.getParameter("url"), command.getParameter("rowID"));
                                 break;
                             case "block":
                                 EchoSocketServer.getStatistic().get(command.getParameter("url")).block(BlockType.USER);

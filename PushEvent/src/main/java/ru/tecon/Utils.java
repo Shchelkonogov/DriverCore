@@ -1,8 +1,11 @@
 package ru.tecon;
 
 import ru.tecon.beanInterface.LoadOPCRemote;
+import ru.tecon.dataUploaderClient.beanInterface.DataUploaderAppBeanRemote;
+import ru.tecon.dataUploaderClient.beanInterface.instantData.InstantDataSingletonRemote;
 import ru.tecon.exception.MyServerStartException;
 import ru.tecon.server.EchoSocketServer;
+import weblogic.jndi.WLInitialContextFactory;
 
 import javax.naming.Context;
 import javax.naming.InitialContext;
@@ -20,19 +23,39 @@ public class Utils {
 
     private static Logger log = Logger.getLogger(Utils.class.getName());
 
+    private static Context getContext() throws NamingException {
+        Hashtable<String, String> ht = new Hashtable<>();
+        ht.put(Context.INITIAL_CONTEXT_FACTORY, WLInitialContextFactory.class.getName());
+        ht.put(Context.PROVIDER_URL, "t3://" + ProjectProperty.getServerURI() + ":" + ProjectProperty.getServerPort());
+
+        return new InitialContext(ht);
+    }
+
     /**
      * Метод возвращает ejb bean класс для работы с базой
      * @return ejb класс
      * @throws NamingException ошибка
      */
     public static LoadOPCRemote loadRMI() throws NamingException {
-        Hashtable<String, String> ht = new Hashtable<>();
-        ht.put(Context.INITIAL_CONTEXT_FACTORY, "weblogic.jndi.WLInitialContextFactory");
-        ht.put(Context.PROVIDER_URL, "t3://" + ProjectProperty.getServerURI() + ":" + ProjectProperty.getServerPort());
+        return  (LoadOPCRemote) getContext().lookup("ejb/LoadOPC#" + LoadOPCRemote.class.getName());
+    }
 
-        Context ctx = new InitialContext(ht);
+    /**
+     * Метод возвращает ejb bean класс для работы с мгновенными данными
+     * @return ejb класс
+     * @throws NamingException ошибка загрузки удаленного класса
+     */
+    public static InstantDataSingletonRemote getInstantEJB() throws NamingException {
+        return (InstantDataSingletonRemote) getContext().lookup("ejb/InstantDataSingleton#" + InstantDataSingletonRemote.class.getName());
+    }
 
-        return  (LoadOPCRemote) ctx.lookup("ejb.LoadOPC#ru.tecon.beanInterface.LoadOPCRemote");
+    /**
+     * Метод возвращает ejb bean класс для работы с загрузкой данных
+     * @return ejb класс
+     * @throws NamingException ошибка загрузки удаленного класса
+     */
+    public static DataUploaderAppBeanRemote getDataUploaderAppEJB() throws NamingException {
+        return (DataUploaderAppBeanRemote) getContext().lookup("ejb/DataUploaderApp#" + DataUploaderAppBeanRemote.class.getName());
     }
 
     /**
