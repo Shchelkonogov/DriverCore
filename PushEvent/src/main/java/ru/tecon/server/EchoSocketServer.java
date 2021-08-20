@@ -165,7 +165,15 @@ public class EchoSocketServer {
                 }), midnight, TimeUnit.DAYS.toMinutes(1), TimeUnit.MINUTES);
 
         // Сервис для резервирования логов статистики раз в час
-        hourFuture = service.scheduleAtFixedRate(() -> statistic.forEach((k, v) -> serialize(v)),
+        hourFuture = service.scheduleAtFixedRate(() ->
+                        statistic.forEach((k, v) -> {
+                            serialize(v);
+                            if (v.isSocketHung()) {
+                                log.info("close hung socket for " + k);
+                                v.close();
+                                v.update();
+                            }
+                        }),
                 nextHour, TimeUnit.HOURS.toMinutes(1), TimeUnit.MINUTES);
 
         // Сервис для автоматического снятия блокировок Ошибка сервера и Разрыв соединения. Раз в 20 минут.

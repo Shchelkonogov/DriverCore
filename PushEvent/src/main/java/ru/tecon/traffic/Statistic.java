@@ -18,6 +18,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import static java.time.temporal.ChronoUnit.HOURS;
+
 /**
  * Класс статистики работы сервера MFK1500
  * @author Maksim Shchelkonogov
@@ -119,7 +121,7 @@ public class Statistic implements Serializable {
      * Если socket в данный момент открыт, то новое количество будет 1 иначе 0
      */
     public void clearSocketCount() {
-        if ((socket == null) || socket.isClosed()) {
+        if (!isSocketOpen()) {
             socketCount.set(0);
         } else {
             socketCount.set(1);
@@ -131,13 +133,21 @@ public class Statistic implements Serializable {
      * Закрытие открытого socket, если такой открыт в данный момент
      */
     public void close() {
-        if ((socket != null) && !socket.isClosed()) {
+        if (isSocketOpen()) {
             try {
                 socket.close();
             } catch (IOException e) {
                 LOGGER.log(Level.WARNING, "close socket error", e);
             }
         }
+    }
+
+    /**
+     * Метод проверяет не завис ли socket соединение с контроллером, по причине работы контроллера
+     * @return true если завис
+     */
+    public boolean isSocketHung() {
+        return isSocketOpen() && (Math.abs(HOURS.between(lastRequestTime, LocalDateTime.now())) > 2);
     }
 
     /**
