@@ -124,10 +124,18 @@
             <p:menuitem value="Разблокировать" action="#{statisticBean.changeStatus(false)}"/>
             <p:menuitem value="Снять ограничение трафика" action="#{statisticBean.setIgnoreTraffic(true)}" />
             <p:menuitem value="Вернуть ограничение трафика" action="#{statisticBean.setIgnoreTraffic(false)}" />
-            <p:menuitem value="Удалить" action="#{statisticBean.removeObject}" />
             <p:menuitem value="Последние данные" onclick="PF('logDialog').show();"
                         action="#{statisticBean.requestLog}"/>
+            <p:separator/>
+            <p:menuitem value="Удалить" action="#{statisticBean.removeObject}">
+                <p:confirm header="Подтверждение" message="Вы уверены что хотите удалить эту запись?" icon="pi pi-info-circle" />
+            </p:menuitem>
         </p:contextMenu>
+
+        <p:confirmDialog global="true" showEffect="fade" hideEffect="fade" responsive="true" width="350">
+            <p:commandButton value="Нет" type="button" styleClass="ui-confirmdialog-no"/>
+            <p:commandButton value="Да" type="button" styleClass="ui-confirmdialog-yes" />
+        </p:confirmDialog>
     </h:form>
 
     <h:form rendered="#{statisticBean.admin}" id="dialogForm">
