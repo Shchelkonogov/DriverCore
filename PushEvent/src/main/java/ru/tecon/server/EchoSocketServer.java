@@ -87,7 +87,11 @@ public class EchoSocketServer {
             for (File fileEntry: files) {
                 if (!fileEntry.isDirectory()) {
                     String ip = fileEntry.getName().replaceFirst("[.][^.]+$", "").replaceAll("_", ".");
-                    statistic.put(ip, deserialize(fileEntry.toPath().toAbsolutePath().toString()));
+                    try {
+                        statistic.put(ip, deserialize(fileEntry.toPath().toAbsolutePath().toString()).orElseThrow(MyServerStartException::new));
+                    } catch (MyServerStartException e) {
+                        log.log(Level.WARNING, "error deserialize for {0} empty object", ip);
+                    }
                 }
             }
         }
@@ -330,7 +334,7 @@ public class EchoSocketServer {
      * @param path путь к файлу
      * @return объект статистики или null если ошибка десиреализации
      */
-    private static Statistic deserialize(String path) {
+    private static Optional<Statistic> deserialize(String path) {
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
 
             Statistic statistic = (Statistic) ois.readObject();
@@ -338,11 +342,11 @@ public class EchoSocketServer {
             event.addItem(statistic);
             statistic.update();
 
-            return statistic;
+            return Optional.of(statistic);
         } catch (IOException | ClassNotFoundException e) {
             log.log(Level.WARNING, "deserialize error", e);
         }
-        return null;
+        return Optional.empty();
     }
 
     public static void addServiceLoadListener(ServiceLoadListener serviceLoadListener) {
