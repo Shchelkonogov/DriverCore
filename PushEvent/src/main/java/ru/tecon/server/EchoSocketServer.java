@@ -88,8 +88,8 @@ public class EchoSocketServer {
                 if (!fileEntry.isDirectory()) {
                     String ip = fileEntry.getName().replaceFirst("[.][^.]+$", "").replaceAll("_", ".");
                     try {
-                        statistic.put(ip, deserialize(fileEntry.toPath().toAbsolutePath().toString()).orElseThrow(MyServerStartException::new));
-                    } catch (MyServerStartException e) {
+                        statistic.put(ip, deserialize(fileEntry.toPath().toAbsolutePath().toString()).orElseThrow(NoSuchElementException::new));
+                    } catch (NoSuchElementException e) {
                         log.log(Level.WARNING, "error deserialize for {0} empty object", ip);
                     }
                 }
