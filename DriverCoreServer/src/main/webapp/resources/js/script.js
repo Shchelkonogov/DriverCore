@@ -1,3 +1,17 @@
+$(document).ready(function() {
+    connect();
+
+    try {
+        siteFunctions.patchContextMenuShow();
+
+        $(document.getElementById("tableForm:table")).bind("contextmenu", function (event) {
+            event.preventDefault();
+        });
+    } catch (e) {
+        console.error(e);
+    }
+});
+
 jQuery(window).resize(function() {
     var different = document.getElementById("tableForm:table").offsetWidth - document.getElementById("tableForm:table_data").offsetWidth;
 
@@ -8,15 +22,12 @@ jQuery(window).resize(function() {
     }
 });
 
-jQuery(window).on('load', function () {
-    connect();
-});
-
 var interval;
 
 function connect() {
-    var ws = new WebSocket('ws://172.16.4.26:7001/DriverCore/ws/client');
+    var ws = new WebSocket('ws://172.16.4.26:7003/DriverCore/ws/client');
     // var ws = new WebSocket('ws://localhost:7001/DriverCore/ws/client');
+    // var ws = new WebSocket('ws://10.230.1.102:7001/DriverCore/ws/client');
 
     ws.onmessage = function(e) {
         var split = e.data.toString().split(':');
@@ -63,3 +74,27 @@ function connect() {
 
     interval = setInterval(function() {ws.send('ping message server');}, 25000);
 }
+
+//patch to fix a problem that the context menu disappears after update
+//delay the show to occure after the update
+var siteFunctions = {
+    patchContextMenuShow: function() {
+        var protShow = PrimeFaces.widget.ContextMenu.prototype.show;
+        siteFunctions.patchContextMenuShow.lastEvent = null;
+        PrimeFaces.widget.ContextMenu.prototype.show = function(e) {
+            var ret;
+            if (e) {
+                //saving last event
+                siteFunctions.patchContextMenuShow.lastEvent = e;
+                siteFunctions.patchContextMenuShow.lastEventArg = arguments;
+                siteFunctions.patchContextMenuShow.lastEventContext = this;
+            } else if (siteFunctions.patchContextMenuShow.lastEvent) {
+                //executing last event
+                ret = protShow.apply(siteFunctions.patchContextMenuShow.lastEventContext, siteFunctions.patchContextMenuShow.lastEventArg);
+                //clearing last event
+                siteFunctions.patchContextMenuShow.lastEvent = null;
+            }
+            return ret;
+        };
+    }
+};

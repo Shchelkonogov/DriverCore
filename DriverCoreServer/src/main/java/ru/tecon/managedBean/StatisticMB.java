@@ -116,6 +116,14 @@ public class StatisticMB implements Serializable {
     }
 
     /**
+     * Метод переподписывает объект и отправляет запрос на снятие блокировки
+     */
+    public void resignObject() {
+        webConsoleBean.ResignObject(selectedRow.getObjectName());
+        changeStatus(false);
+    }
+
+    /**
      * Запрос на информацию о контроллере
      * @param ip адрес контролера
      * @param serverName сервер приема данных с контроллера
