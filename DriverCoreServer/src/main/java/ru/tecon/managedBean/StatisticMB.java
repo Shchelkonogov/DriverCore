@@ -3,11 +3,10 @@ package ru.tecon.managedBean;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.primefaces.PrimeFaces;
 import org.primefaces.event.SelectEvent;
+import org.primefaces.model.LazyDataModel;
 import ru.tecon.driverCoreClient.model.LastData;
 import ru.tecon.ejb.WebConsoleBean;
-import ru.tecon.model.Command;
-import ru.tecon.model.ObjectInfoModel;
-import ru.tecon.model.WebStatistic;
+import ru.tecon.model.*;
 import ru.tecon.report.WebStatisticReport;
 
 import javax.annotation.PostConstruct;
@@ -43,8 +42,7 @@ public class StatisticMB implements Serializable {
 
     private boolean admin = false;
 
-    private List<WebStatistic> tableData = new ArrayList<>();
-    private List<WebStatistic> filteredTableData = new ArrayList<>();
+    private LazyCustomDataModel<WebStatistic> tableData = new LazyCustomDataModel<>();
     private WebStatistic selectedRow;
 
     private List<ObjectInfoModel> infoTableData = new ArrayList<>();
@@ -84,7 +82,7 @@ public class StatisticMB implements Serializable {
             ec.setResponseCharacterEncoding("UTF-8");
 
             try (OutputStream outputStream = ec.getResponseOutputStream();
-                 Workbook wb = WebStatisticReport.generateReport(filteredTableData)) {
+                 Workbook wb = WebStatisticReport.generateReport(tableData.getFilteredData())) {
                 wb.write(outputStream);
                 outputStream.flush();
             } catch (IOException e) {
@@ -257,7 +255,7 @@ public class StatisticMB implements Serializable {
         Jsonb jsonBuilder = JsonbBuilder.create();
         List<WebStatistic> newStatistics = jsonBuilder.fromJson(json, new ArrayList<WebStatistic>(){}.getClass().getGenericSuperclass());
 
-        tableData.removeIf(statistic -> {
+        tableData.getDataSource().removeIf(statistic -> {
            for (WebStatistic newStatistic: newStatistics) {
                if (statistic.getServerName().equals(newStatistic.getServerName()) &&
                        statistic.getIp().equals(newStatistic.getIp())) {
@@ -267,7 +265,7 @@ public class StatisticMB implements Serializable {
            return false;
         });
 
-        tableData.addAll(newStatistics);
+        tableData.getDataSource().addAll(newStatistics);
 
         PrimeFaces.current().executeScript("PF('tableWidget').filter(); updateFooter();");
     }
@@ -282,8 +280,9 @@ public class StatisticMB implements Serializable {
 
         webConsoleBean.produceMessage(command);
 
-        tableData.clear();
-        webConsoleBean.produceMessage(new Command("requestStatistic"));
+        ((LazyCustomDataModel) tableData).getDataSource().remove(selectedRow);
+
+        PrimeFaces.current().executeScript("PF('tableWidget').filter(); updateFooter();");
     }
 
     /**
@@ -335,12 +334,12 @@ public class StatisticMB implements Serializable {
 
         boolean contains = false;
 
-        for (WebStatistic tableDatum: tableData) {
+        for (WebStatistic tableDatum: tableData.getDataSource()) {
             if (tableDatum.getServerName().equals(st.getServerName()) &&
                     tableDatum.getIp().equals(st.getIp())) {
                 List<String> update = new ArrayList<>();
                 boolean filter = false;
-                int index = filteredTableData.indexOf(tableDatum);
+                int index = tableData.getFilteredData().indexOf(tableDatum);
 
                 if (!tableDatum.getObjectName().equals(st.getObjectName())) {
                     tableDatum.setObjectName(st.getObjectName());
@@ -390,7 +389,7 @@ public class StatisticMB implements Serializable {
                     PrimeFaces.current().executeScript("PF('tableWidget').filter(); updateFooter();");
                 } else {
                     if (index != -1) {
-                        update.forEach(s -> PrimeFaces.current().ajax().update(s));
+                        PrimeFaces.current().ajax().update(update);
                     }
                 }
 
@@ -400,7 +399,7 @@ public class StatisticMB implements Serializable {
         }
 
         if (!contains) {
-            tableData.add(st);
+            tableData.getDataSource().add(st);
 
             PrimeFaces.current().executeScript("PF('tableWidget').filter(); updateFooter();");
         }
@@ -412,14 +411,6 @@ public class StatisticMB implements Serializable {
 
     public List<ObjectInfoModel> getInfoTableData() {
         return infoTableData;
-    }
-
-    public List<WebStatistic> getFilteredTableData() {
-        return filteredTableData;
-    }
-
-    public void setFilteredTableData(List<WebStatistic> filteredTableData) {
-        this.filteredTableData = filteredTableData;
     }
 
     public boolean isAdmin() {
@@ -438,8 +429,16 @@ public class StatisticMB implements Serializable {
         return serverName;
     }
 
-    public List<WebStatistic> getTableData() {
+    public LazyDataModel<WebStatistic> getTableData() {
         return tableData;
+    }
+
+    public int getTableDataSize() {
+        return tableData.getDataSource().size();
+    }
+
+    public int getIndex(WebStatistic object) {
+        return tableData.getFilteredData().indexOf(object) + 1;
     }
 
     public WebStatistic getSelectedRow() {

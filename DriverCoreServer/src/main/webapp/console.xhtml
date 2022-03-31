@@ -30,11 +30,13 @@
 
     <h:form id="tableForm" style="height: calc(100% - 5px); margin: 5px;">
         <p:dataTable id="table" emptyMessage="Данных нет" var="rowData" value="#{statisticBean.tableData}"
+                     scrollRows="100" virtualScroll="true" lazy="true"
                      scrollable="true" scrollHeight="100%" sortBy="#{rowData.objectName}" sortOrder="ascending"
-                     selectionMode="single" selection="#{statisticBean.selectedRow}" rowIndexVar="rowIndex"
-                     filteredValue="#{statisticBean.filteredTableData}" widgetVar="tableWidget" rowKey="#{rowData.rowId}">
+                     selectionMode="single" selection="#{statisticBean.selectedRow}"
+                     widgetVar="tableWidget" rowKey="#{rowData.rowId}" >
 
             <p:ajax event="contextMenu" update=":tableForm:ctx" oncomplete="PF('wvCtx').show();" />
+            <p:ajax event="filter" onstart="saveScrollPos();" oncomplete="getScrollPos();"/>
 
             <p:columnGroup type="header">
                 <p:row>
@@ -60,7 +62,7 @@
             </p:columnGroup>
 
             <p:column>
-                <h:outputText value="#{rowIndex + 1}" />
+                <h:outputText value="#{statisticBean.getIndex(rowData)}" />
             </p:column>
 
             <p:column>
@@ -113,7 +115,7 @@
                 <div class="footer-style">
                     <div>
                         Всего объектов:
-                        <h:outputText id="footerText" value="#{statisticBean.tableData.size()}" />
+                        <h:outputText id="footerText" value="#{statisticBean.tableDataSize}" />
                     </div>
                     <div>
                         <p:commandButton value="Выгрузка в Excel" icon="pi pi-upload" action="#{statisticBean.createReport}" ajax="false" />

@@ -98,3 +98,12 @@ var siteFunctions = {
         };
     }
 };
+
+var scrollPos;
+
+function saveScrollPos() {
+    scrollPos = $(".ui-datatable-scrollable-body").scrollTop();
+}
+function getScrollPos() {
+    $(".ui-datatable-scrollable-body").scrollTop(scrollPos);
+}
