@@ -148,7 +148,7 @@ public final class ControllerConfig {
     }
 
     public static List<String> getConfigNames(int bufferNumber, int eventCode, int size) {
-        return config.getOrDefault(bufferNumber + ":" + eventCode + ":" + size, null);
+        return config.getOrDefault(bufferNumber + ":" + eventCode + ":" + size, new ArrayList<>());
     }
 
     /**
