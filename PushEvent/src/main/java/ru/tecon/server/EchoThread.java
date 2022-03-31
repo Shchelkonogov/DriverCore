@@ -558,8 +558,8 @@ public class EchoThread extends Thread {
 
                 List<String> parameters = ControllerConfig.getConfigNames(bufferNumber, eventCode, parseData.size());
 
-                if ((parameters != null) && (parameters.size() == parseData.size())) {
-                    statistic.addData(bufferNumber, eventCode, parseData.size());
+                if ((!parameters.isEmpty()) && (parameters.size() == parseData.size())) {
+                    statistic.addData(bufferNumber, eventCode, parseData, dateTime);
 
                     configNames.addAll(parameters.stream()
                             .map(s -> s.split(":")[0])

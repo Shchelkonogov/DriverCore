@@ -186,6 +186,12 @@ public class StatisticMB implements Serializable {
 
         Jsonb json = JsonbBuilder.create();
         configNames = json.fromJson(info, new ArrayList<String>(){}.getClass().getGenericSuperclass());
+
+        if (configNames.size() == selectedLastDataGroup.getData().size()) {
+            for (int i = 0; i < configNames.size(); i++) {
+                configNames.set(i, configNames.get(i) + " / " + selectedLastDataGroup.getData().get(i));
+            }
+        }
     }
 
     /**
@@ -458,7 +464,8 @@ public class StatisticMB implements Serializable {
     }
 
     public String getSelectedLastDataGroupName() {
-        return selectedLastDataGroup.getGroupName();
+        return selectedLastDataGroup.getGroupName() + " " +
+                selectedLastDataGroup.getDateTime().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")) + " UTC";
     }
 
     public String getCurrentDate() {

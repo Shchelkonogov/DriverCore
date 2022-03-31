@@ -52,7 +52,7 @@ public class Statistic implements Serializable {
 
     private boolean ignoreTraffic = false;
 
-    private Map<String, AtomicInteger> lastDayData = new HashMap<>();
+    private Map<String, LastDayData> lastDayData = new HashMap<>();
 
     private transient Socket socket;
 
@@ -379,17 +379,20 @@ public class Statistic implements Serializable {
      * Метод добавляет статистику по последним пришедшим данным от контроллера.
      * Добавляется информации о конфигурации группы переданных данных
      */
-    public void addData(int bufferNumber, int eventCode, int size) {
-        String configGroupIdentifier = bufferNumber + ":" + eventCode + ":" + size;
+    public void addData(int bufferNumber, int eventCode, List<Object> data, LocalDateTime dateTime) {
+        String configGroupIdentifier = bufferNumber + ":" + eventCode + ":" + data.size();
 
         if (lastDayData == null) {
             lastDayData = new HashMap<>();
         }
 
         if (lastDayData.containsKey(configGroupIdentifier)) {
-            lastDayData.get(configGroupIdentifier).addAndGet(1);
+            LastDayData dayData = lastDayData.get(configGroupIdentifier);
+            dayData.getCount().addAndGet(1);
+            dayData.setDateTime(dateTime);
+            dayData.setData(data);
         } else {
-            lastDayData.put(configGroupIdentifier, new AtomicInteger(1));
+            lastDayData.put(configGroupIdentifier, new LastDayData(new AtomicInteger(1), dateTime, data));
         }
     }
 
@@ -414,7 +417,9 @@ public class Statistic implements Serializable {
                                         .stream()
                                         .map(param -> param.split(":")[0])
                                         .collect(Collectors.toSet())),
-                                value.get()));
+                                value.getCount().get(),
+                                value.getDateTime(),
+                                value.getData()));
             });
         }
 
