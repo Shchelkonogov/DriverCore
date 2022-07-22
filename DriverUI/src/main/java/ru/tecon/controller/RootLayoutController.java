@@ -13,6 +13,8 @@ import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.Event;
 import ru.tecon.traffic.Statistic;
 
+import java.util.Properties;
+
 public class RootLayoutController {
 
     private Stage primaryStage;
@@ -115,7 +117,10 @@ public class RootLayoutController {
         Thread serviceThread = new Thread(() -> {
             try {
                 stopButton.setDisable(false);
-                EchoSocketServer.startService(System.getProperty("user.dir") + "/resources/config.properties");
+
+                Properties prop = new Properties();
+                prop.setProperty("config", System.getProperty("user.dir") + "/resources/config.properties");
+                EchoSocketServer.startService(prop);
             } catch (MyServerStartException e) {
                 startButton.setDisable(false);
                 stopButton.setDisable(true);

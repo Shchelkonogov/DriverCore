@@ -19,10 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.Comparator;
-import java.util.NoSuchElementException;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
@@ -53,10 +50,40 @@ public class EchoSocketServer {
     private static Event event;
     private static ServiceLoadListener serviceLoadListener;
 
+    /**
+     * Для запуска из любого места используются три параметра.
+     * Первый параметр указывает на путь к файлу с конфигурациями config.properties config=[?]
+     * Второй параметр указывает на папку из под которой планируется запуск приложение userDir=[?]
+     * Третий параметр указывает на путь к файлу с конфигурацие для логов log.properties log=[?]
+     * Второй и третий параметр не обязательный
+     * @param args вводные параметры
+     */
     public static void main(String[] args) {
+        Properties prop = new Properties();
+
+        for (String s: args) {
+            if (s.contains("=")) {
+                prop.setProperty(s.split("=")[0], s.split("=")[1]);
+            }
+        }
+
         try {
-            LogManager.getLogManager().readConfiguration(EchoSocketServer.class.getResourceAsStream("/log.properties"));
-            startService(args);
+            if (prop.containsKey("log")) {
+                try (InputStream in = Files.newInputStream(Paths.get(prop.getProperty("log")))) {
+                    LogManager.getLogManager().readConfiguration(in);
+                }
+            } else {
+                LogManager.getLogManager().readConfiguration(EchoSocketServer.class.getResourceAsStream("/log.properties"));
+            }
+
+            if (!prop.containsKey("config")) {
+                log.warning("config=<> parameter is required");
+                System.exit(1);
+            }
+
+            log.log(Level.INFO, "start parameters {0}", prop);
+
+            startService(prop);
         } catch (IOException e) {
             log.log(Level.WARNING, "load logging config error:", e);
         } catch (MyServerStartException e) {
@@ -64,8 +91,19 @@ public class EchoSocketServer {
         }
     }
 
-    public static void startService(String... args) throws MyServerStartException {
-        ProjectProperty.loadProperties(args[0]);
+    public static void startService(Properties prop) throws MyServerStartException {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                Thread.sleep(200);
+                log.info("Shutting down...");
+                stopSocket();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.log(Level.WARNING, "error shutdown hook", e);
+            }
+        }));
+
+        ProjectProperty.loadProperties(prop);
         log.info("project properties load");
         System.out.println("Конфигурация приложения загружена");
 

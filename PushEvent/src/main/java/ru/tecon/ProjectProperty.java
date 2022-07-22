@@ -2,8 +2,8 @@ package ru.tecon;
 
 import ru.tecon.exception.MyServerStartException;
 
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -17,7 +17,7 @@ public class ProjectProperty {
 
     private static Logger LOG = Logger.getLogger(ProjectProperty.class.getName());
 
-    private static final String userDir = System.getProperty("user.dir");
+    private static String userDir = System.getProperty("user.dir");
 
     private static int port;
     private static int instantPort;
@@ -39,14 +39,22 @@ public class ProjectProperty {
 
     /**
      * Метод выгружает конфигурацию из файла в себя
-     * @param path путь к файлу конфигурации
+     * @param startProp стартовые настройки приложения
      */
-    public static void loadProperties(String path) throws MyServerStartException {
+    public static void loadProperties(Properties startProp) throws MyServerStartException {
         Properties prop = new Properties();
 
+        if (startProp.containsKey("userDir")) {
+            userDir = startProp.getProperty("userDir");
+        }
+
         try {
-            if (Files.exists(Paths.get(path))) {
-                prop.load(new FileInputStream(path));
+            if ((startProp.containsKey("config")) && (Files.exists(Paths.get(startProp.getProperty("config"))))) {
+                try (InputStream in = Files.newInputStream(Paths.get(startProp.getProperty("config")))) {
+                    prop.load(in);
+                } catch (IOException ex) {
+                    throw new MyServerStartException("error parse config file");
+                }
             } else {
                 prop.load(ProjectProperty.class.getResourceAsStream("/config.properties"));
             }
