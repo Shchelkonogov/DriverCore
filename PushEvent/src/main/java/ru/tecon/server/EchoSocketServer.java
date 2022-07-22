@@ -22,6 +22,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.LogManager;
@@ -316,7 +317,9 @@ public class EchoSocketServer {
             log.warning("error remove push event logs for ip: " + ip + " message: " + e.getMessage());
         }
 
-        event.update();
+        if (event != null) {
+            event.update();
+        }
     }
 
     public static void setEvent(Event event) {
@@ -353,8 +356,12 @@ public class EchoSocketServer {
         try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
 
             Statistic statistic = (Statistic) ois.readObject();
-            statistic.setEvent(event);
-            event.addItem(statistic);
+
+            if (event != null) {
+                statistic.setEvent(event);
+                event.addItem(statistic);
+            }
+
             statistic.update();
 
             return Optional.of(statistic);
