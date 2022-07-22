@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.logging.Level;
@@ -284,7 +285,20 @@ public class EchoSocketServer {
      * @param ip ip объекта статистики для удаления
      */
     public static void removeStatistic(String ip) {
+        log.log(Level.INFO, "remove object {0}", ip);
+
+        // Удаление статистики из памяти
         statistic.remove(ip);
+
+        // Удаление файла .ser
+        try {
+            Files.deleteIfExists(Paths.get(ProjectProperty.getStatisticSerFolder() +
+                    "/" +
+                    ip.replaceAll("[.]", "_") +
+                    ".ser"));
+        } catch (IOException e) {
+            log.log(Level.WARNING, "can't remove .ser file", e);
+        }
 
         // Удаление всех pushEvent логов
         try (Stream<Path> walk = Files.walk(Paths.get(ProjectProperty.getPushEventLogFolder() + "/" + ip))) {
@@ -297,6 +311,7 @@ public class EchoSocketServer {
                             log.warning("error remove file: " + path + " message: " + e.getMessage());
                         }
                     });
+        } catch (NoSuchFileException ignore) {
         } catch (IOException e) {
             log.warning("error remove push event logs for ip: " + ip + " message: " + e.getMessage());
         }
