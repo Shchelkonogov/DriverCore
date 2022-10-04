@@ -1,32 +1,42 @@
 package ru.tecon.server;
 
-import ru.tecon.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import ru.tecon.Utils;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.controllerData.ControllerConfig;
+import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.exception.MySocketException;
 import ru.tecon.model.DataModel;
-import ru.tecon.server.model.ParseDataModel;
 import ru.tecon.model.ValueModel;
-import ru.tecon.traffic.*;
+import ru.tecon.server.model.ParseDataModel;
+import ru.tecon.traffic.BlockType;
+import ru.tecon.traffic.MonitorInputStream;
+import ru.tecon.traffic.MonitorOutputStream;
+import ru.tecon.traffic.Statistic;
 
 import javax.ejb.EJBException;
 import javax.naming.NamingException;
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
+
+import static java.nio.file.StandardOpenOption.APPEND;
+import static java.nio.file.StandardOpenOption.CREATE;
 
 public class EchoThread extends Thread {
 
-    private static final Logger LOG = Logger.getLogger(EchoThread.class.getName());
+    private static Logger logger = LoggerFactory.getLogger(EchoThread.class);
 
     private Socket socket;
     private String serverName;
@@ -58,8 +68,7 @@ public class EchoThread extends Thread {
             out = new MonitorOutputStream(socket.getOutputStream());
             out.setStatistic(statistic);
         } catch (IOException e) {
-            LOG.warning("run Error create data streams Message: " + e.getMessage()
-                    + " Thread: " + this.getId() + " ObjectName: " + objectName);
+            logger.warn("Error create data streams", e);
             return;
         }
 
@@ -68,7 +77,7 @@ public class EchoThread extends Thread {
                 // Читаем первые 2 байта в которых указан размер сообщения
                 byte[] data = new byte[2];
                 if (in.read(data, 0, 2) != -1) {
-                    LOG.info("Thread: " + this.getId() + " Message size: " + Arrays.toString(data));
+                    logger.info("Message size {} objectName: {}", Arrays.toString(data), objectName);
                     int size = (((data[0] & 0xff) << 8) | (data[1] & 0xff));
 
                     // Читаем сообщение
@@ -78,17 +87,15 @@ public class EchoThread extends Thread {
                         statistic.block(BlockType.SERVER_ERROR);
 
                         socket.close();
-                        LOG.warning("run Error read message Socket close! Thread: " + this.getId() +
-                                " ObjectName: " + objectName);
+                        logger.warn("Error read message Socket close! objectName: {}", objectName);
                         return;
                     }
                     in.readFully(data);
-                    LOG.info("Thread: " + this.getId() + " Message body: " + Arrays.toString(data));
+                    logger.info("Message body {} objectName: {}", Arrays.toString(data), objectName);
 
                     int packageType = data[0] & 0xff;
 
-                    LOG.info("run Data size: " + size + " packageType " + packageType +
-                            " Thread: " + this.getId() + " ObjectName: " + objectName);
+                    logger.info("Data size: {} packageType: {} objectName: {}", size, packageType, objectName);
 
                     switch (packageType) {
                         case 1: {
@@ -97,7 +104,7 @@ public class EchoThread extends Thread {
                         }
                         case 3: {
                             if (!opc.checkObject(serverName + '_' + objectName, serverName)) {
-                                LOG.info("check object return false Thread: " + this.getId() + " objectName: " + objectName);
+                                logger.info("Object is not linked, block client objectName: {}", objectName);
                                 statistic.block(BlockType.LINKED);
                                 socket.close();
                                 return;
@@ -106,7 +113,7 @@ public class EchoThread extends Thread {
                             ArrayList<DataModel> dataModels = opc.loadObjectParameters(serverName + '_' + objectName, serverName);
                             Collections.sort(dataModels);
 
-                            LOG.info("load parameters from db Thread: " + this.getId() + " objectName: " + objectName);
+                            logger.info("Loaded parameters from db objectName: {}", objectName);
 
                             List<ParseDataModel> result = new ArrayList<>();
                             int messagesCount;
@@ -121,9 +128,8 @@ public class EchoThread extends Thread {
                                         statistic.block(BlockType.SERVER_ERROR);
 
                                         socket.close();
-                                        LOG.warning("run Parse version 1 exception. Socket close! " + e.getMessage() +
-                                                " Data: " + Arrays.toString(data) +
-                                                " Thread: " + this.getId() + " ObjectName: " + objectName);
+                                        logger.warn("Parse version 1 exception. Socket close! Data: {} objectName: {}",
+                                                Arrays.toString(data), objectName, e);
                                         return;
                                     }
                                     break;
@@ -140,9 +146,8 @@ public class EchoThread extends Thread {
                                         statistic.block(BlockType.SERVER_ERROR);
 
                                         socket.close();
-                                        LOG.warning("run Parse version 2 exception. Socket close! " + e.getMessage() +
-                                                " Data: " + Arrays.toString(data) +
-                                                " Thread: " + this.getId() + " ObjectName: " + objectName);
+                                        logger.warn("Parse version 2 exception. Socket close! Data: {} objectName: {}",
+                                                Arrays.toString(data), objectName, e);
                                         return;
                                     }
                                     break;
@@ -150,12 +155,12 @@ public class EchoThread extends Thread {
                                     statistic.block(BlockType.SERVER_ERROR);
 
                                     socket.close();
-                                    LOG.warning("run Unknown protocolVersion. Socket close! Data: " + Arrays.toString(data) +
-                                            " Thread: " + this.getId() + " ObjectName: " + objectName);
+                                    logger.warn("Unknown protocolVersion. Socket close! Data: {} objectName: {}",
+                                            Arrays.toString(data), objectName);
                                     return;
                             }
 
-                            LOG.info("message parsed Thread: " + this.getId() + " objectName: " + objectName);
+                            logger.info("Message parsed. objectName: {}", objectName);
 
                             Collections.sort(result);
 
@@ -172,7 +177,7 @@ public class EchoThread extends Thread {
 
                             dataModels.removeIf(dataModel -> dataModel.getData().isEmpty());
 
-                            LOG.info("put data to db size: " + dataModels.size() + " Thread: " + this.getId() + " objectName: " + objectName);
+                            logger.info("Put data to DB size: {} objectName: {}", dataModels.size(), objectName);
 
                             opc.putDataWithCalculateIntegrator(dataModels);
 
@@ -193,8 +198,7 @@ public class EchoThread extends Thread {
                                     response[3] = messageCountArray[3];
                             }
 
-                            LOG.info("run send load message ok: " + Arrays.toString(response) +
-                                    " Thread: " + this.getId() + " objectName: " + objectName);
+                            logger.info("Send load message ok: {} objectName: {}", Arrays.toString(response), objectName);
 
                             out.write(response);
                             out.flush();
@@ -210,8 +214,7 @@ public class EchoThread extends Thread {
                             response[3] = (byte) (markV2.length & 0xff);
                             System.arraycopy(markV2, 0, response, 4, markV2.length);
 
-                            LOG.info("run send mark Message: " + Arrays.toString(response) +
-                                    " Thread: " + this.getId() + " objectName: " + objectName);
+                            logger.info("Send mark message: {} objectName: {}", Arrays.toString(response), objectName);
 
                             out.write(response);
                             out.flush();
@@ -221,8 +224,7 @@ public class EchoThread extends Thread {
                             statistic.block(BlockType.SERVER_ERROR);
 
                             socket.close();
-                            LOG.warning("run Unknown packageType. Socket close! Data: " + Arrays.toString(data) +
-                                    " Thread: " + this.getId() + " ObjectName: " + objectName);
+                            logger.warn("Unknown packageType. data: {} objectName: {}", Arrays.toString(data), objectName);
                             return;
                         }
                     }
@@ -230,36 +232,32 @@ public class EchoThread extends Thread {
                     statistic.block(BlockType.LINK_ERROR);
 
                     socket.close();
-                    LOG.warning("run Can`t read head of message Socket close! Thread: " + this.getId()
-                            + " ObjectName: " + objectName);
+                    logger.warn("Can't read head of message. Socket close! objectName: {}", objectName);
                     return;
                 }
             } catch (EJBException e) {
-                LOG.warning("Error with remote opc object");
+                logger.warn("EJBException when read messages. objectName: {}", objectName, e);
                 try {
                     socket.close();
                 } catch (IOException ex) {
-                    LOG.warning("EJBException when read messages Error: " + ex.getMessage() + " Thread: " + this.getId() +
-                            " ObjectName: " + objectName);
+                    logger.warn("Error close socket. objectName: {}", objectName, ex);
                     return;
                 }
                 statistic.block(BlockType.SERVER_ERROR);
 
                 return;
             } catch (MySocketException e) {
-                LOG.warning("run My error " + e.getMessage() + " Thread: " + this.getId() + " objectName: " + objectName);
+                logger.warn("My error. objectName: {}", objectName, e);
                 return;
             } catch (IOException e) {
-                LOG.warning("run Error when read messages Error: " + e.getMessage() + " Thread: " + this.getId() +
-                        " ObjectName: " + objectName);
+                logger.warn("Error when read message. objectName: {}", objectName, e);
 
                 // Иногда возникает ошибка Read timed out и в этом случае похоже socket не закрывается
                 if (!socket.isClosed()) {
                     try {
                         socket.close();
                     } catch (IOException ex) {
-                        LOG.warning("EJBException when read messages Error: " + ex.getMessage() + " Thread: " + this.getId() +
-                                " ObjectName: " + objectName);
+                        logger.warn("Error close socket. objectName: {}", objectName, ex);
                         return;
                     }
                 }
@@ -288,7 +286,7 @@ public class EchoThread extends Thread {
 
         int direction = data[2] & 0xff;
         if (!(direction == 0 || direction == 1)) {
-            LOG.warning("identify duration error Thread: " + this.getId() + " objectName: " + objectName);
+            logger.warn("Identify duration error. objectName: {}", objectName);
             out.write(getIdentificationFailureMessage());
             out.flush();
 
@@ -302,9 +300,8 @@ public class EchoThread extends Thread {
 
         String model = new String(Arrays.copyOfRange(data, 4, data.length));
 
-        LOG.info("identify version: " + version + " direction: " + direction +
-                " controllerNumber: " + controllerNumber + " model: " + model +
-                " Thread: " + this.getId() + " objectName: " + objectName);
+        logger.info("Identify version: {} direction: {} controllerNumber: {} model: {} objectName: {}",
+                version, direction, controllerNumber, model, objectName);
 
         try {
             opc = Utils.loadRMI();
@@ -315,11 +312,11 @@ public class EchoThread extends Thread {
                     model;
 
             if (opc.checkObject(serverName + '_' + objectName, serverName)) {
-                LOG.info("identify Check object return true Thread: " + this.getId() + " objectName: " + objectName);
+                logger.info("Object is linked. objectName: {}", objectName);
                 out.write(getConfirmIdentifyMessage());
                 out.flush();
             } else {
-                LOG.info("identify Check object return false Thread: " + this.getId() + " objectName: " + objectName);
+                logger.info("Object is not linked. objectName: {}", objectName);
                 out.write(getIdentificationFailureMessage());
                 out.flush();
 
@@ -329,8 +326,7 @@ public class EchoThread extends Thread {
                 throw new MySocketException("identify failure");
             }
         } catch (NamingException e) {
-            LOG.warning("identify remote server error " + e.getMessage() +
-                    " Thread: " + this.getId() + " objectName: " + objectName);
+            logger.warn("Identify remote server error. objectName: {}", objectName, e);
             out.write(getIdentificationFailureMessage());
             out.flush();
 
@@ -359,8 +355,7 @@ public class EchoThread extends Thread {
         response[5] = 1 & 0xff; // TODO Номер сервера в системе (для теста написал 1)
         System.arraycopy(serverNameBytes, 0, response, 6, serverNameBytes.length);
 
-        LOG.info("getConfirmIdentifyMessage Message: " + Arrays.toString(response) +
-                " Thread: " + this.getId() + " objectName: " + objectName);
+        logger.info("Send confirm identify message {}. objectName: {}", Arrays.toString(response), objectName);
         return response;
     }
 
@@ -379,8 +374,7 @@ public class EchoThread extends Thread {
         response[4] = 1 & 0xff;
         response[5] = 1 & 0xff; // TODO Номер сервера в системе (для теста написал 1)
 
-        LOG.info("getIdentificationFailureMessage Message: " + Arrays.toString(response) +
-                " Thread: " + this.getId() + " objectName: " + objectName);
+        logger.info("Send identify failure message {}. objectName: {}", Arrays.toString(response), objectName);
         return response;
     }
 
@@ -577,26 +571,21 @@ public class EchoThread extends Thread {
                 repeatCount++;
             }
         } catch (IndexOutOfBoundsException e) {
-            LOG.log(Level.WARNING, "IndexOutOfBoundsException:", e);
+            logger.warn("IndexOutOfBoundsException", e);
         }
 
         // Проверяем существует ли директория для логов, создаем если такой нет
-        String path = ProjectProperty.getPushEventLogFolder() + "/" + socket.getInetAddress().getHostAddress();
-        if (!Files.exists(Paths.get(path))) {
-            Files.createDirectory(Paths.get(path));
+        Path path = DriverProperty.getInstance().getPushEventLogPath().resolve(socket.getInetAddress().getHostAddress());
+        if (!Files.exists(path)) {
+            Files.createDirectory(path);
         }
 
         String currentTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss_SSS"));
         // Сохраняем файл логов с данными
-        Files.write(Paths.get(path + "/" + currentTime + ".txt"), result);
+        Files.write(path.resolve(currentTime + ".txt"), result);
         // Создается или дописывается в существующий файл группы переданных данных
-        try (FileWriter fw = new FileWriter(path + "/" + ProjectProperty.PUSH_EVENT_LAST_CONFIG, true);
-             PrintWriter out = new PrintWriter(fw)) {
-            out.println(currentTime);
-            configNames.forEach(out::println);
-        } catch (IOException e) {
-            LOG.warning("error write lastConfigNames " + e.getMessage());
-        }
+        Files.write(path.resolve(DriverProperty.getInstance().getPushEventLastConfig()), (currentTime + System.lineSeparator()).getBytes(), APPEND, CREATE);
+        Files.write(path.resolve(DriverProperty.getInstance().getPushEventLastConfig()), configNames, APPEND, CREATE);
 
         return repeatCount;
     }

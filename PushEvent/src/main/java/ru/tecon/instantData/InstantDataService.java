@@ -1,7 +1,9 @@
 package ru.tecon.instantData;
 
-import ru.tecon.ProjectProperty;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.tecon.Utils;
+import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.isacom.*;
 import ru.tecon.model.DataModel;
 import ru.tecon.model.ValueModel;
@@ -22,15 +24,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Класс для работы с мгновенными данными
  */
 public final class InstantDataService {
 
-    private static final Logger LOG = Logger.getLogger(InstantDataService.class.getName());
+    private static Logger logger = LoggerFactory.getLogger(InstantDataService.class);
 
     private static ScheduledExecutorService service;
     private static ScheduledFuture future;
@@ -44,9 +44,9 @@ public final class InstantDataService {
      */
     public static void stopService() {
         try {
-            Utils.getInstantEJB().removeServer(ProjectProperty.getServerName());
+            Utils.getInstantEJB().removeServer(DriverProperty.getInstance().getServerName());
         } catch (NamingException e) {
-            LOG.log(Level.WARNING, "error stop instant data service", e);
+            logger.warn("Error stop instant data service", e);
         }
         if (Objects.nonNull(service)) {
             future.cancel(true);
@@ -61,12 +61,14 @@ public final class InstantDataService {
         service = Executors.newSingleThreadScheduledExecutor();
         future = service.scheduleWithFixedDelay(() -> {
             try {
-                if (!Utils.getInstantEJB().isSubscribed(ProjectProperty.getServerName())) {
-                    Utils.getInstantEJB().addServer(ProjectProperty.getServerName(),
-                            ProjectProperty.getServerURI(), ProjectProperty.getServerPort(), "ejb/MFK1500InstantData");
+                if (!Utils.getInstantEJB().isSubscribed(DriverProperty.getInstance().getServerName())) {
+                    Utils.getInstantEJB().addServer(DriverProperty.getInstance().getServerName(),
+                            DriverProperty.getInstance().getServerURI(),
+                            DriverProperty.getInstance().getServerPort(),
+                            "ejb/MFK1500InstantData");
                 }
             } catch (NamingException e) {
-                LOG.log(Level.WARNING, "error stop instant data service", e);
+                logger.warn("Error check instant data service", e);
             }
         }, 0, 30, TimeUnit.MINUTES);
     }
@@ -78,22 +80,22 @@ public final class InstantDataService {
      *              Требуется для проставления статуса выполнения запроса.
      */
     public static void uploadInstantData(String url, String rowID) {
-        String errorPath = ProjectProperty.getServerName() + "_" + url;
+        String errorPath = DriverProperty.getInstance().getServerName() + "_" + url;
 
         try (ControllerSocket socket = new ControllerSocket(url);
              InputStream in = socket.getInputStream();
              OutputStream out = socket.getOutputStream()) {
 
             if (EchoSocketServer.isBlocked(url, BlockType.TRAFFIC)) {
-                LOG.info("traffic block");
+                logger.warn("Traffic block {}", errorPath);
                 Utils.getDataUploaderAppEJB().updateCommand(0, rowID, "Error",
                         "Превышение трафика по объекту '" + errorPath + "'");
                 return;
             }
 
-            List<DataModel> parameters = Utils.loadRMI().loadObjectInstantParameters(ProjectProperty.getServerName(), url);
+            List<DataModel> parameters = Utils.loadRMI().loadObjectInstantParameters(DriverProperty.getInstance().getServerName(), url);
 
-            LOG.info("load instantData for url: " + url + " parameters count: " + parameters.size());
+            logger.info("Load instantData for {} parameters count {}", errorPath, parameters.size());
 
             List<IsacomModel> isacomModels = new ArrayList<>();
             for (DataModel model : parameters) {
@@ -161,7 +163,7 @@ public final class InstantDataService {
             }
 
             if (isacomModels.isEmpty()) {
-                LOG.warning("Есть запрос на мгновенные данные, но не удалось распознать параметры");
+                logger.warn("There is a request for instant data, but the parameters could not be recognized {}", errorPath);
                 Utils.getDataUploaderAppEJB().updateCommand(0, rowID, "Error",
                         "По объекту '" + errorPath + "' не подписан ни один параметр");
                 return;
@@ -170,7 +172,7 @@ public final class InstantDataService {
             try {
                 IsacomProtocol.createVariableList(in, out, isacomModels);
             } catch (IsacomException e) {
-                LOG.warning("Проблема чтения ответа на создание переменных");
+                logger.warn("Problem reading response to creating variables {}", errorPath);
                 Utils.getDataUploaderAppEJB().updateCommand(0, rowID, "Error",
                         "Проблема чтения ответа на создание переменных");
                 return;
@@ -179,7 +181,7 @@ public final class InstantDataService {
             try {
                 IsacomProtocol.readVariableList(in, out, isacomModels);
             } catch (IsacomException e) {
-                LOG.warning("Проблема чтения ответа на чтение переменных по списку");
+                logger.warn("Problem reading response to reading variables by list {}", errorPath);
                 Utils.getDataUploaderAppEJB().updateCommand(0, rowID, "Error",
                         "Проблема чтения ответа на чтение переменных по списку");
                 return;
@@ -205,7 +207,7 @@ public final class InstantDataService {
             int parametersCount = parameters.size();
             parameters.removeIf(dataModel -> dataModel.getData().isEmpty());
 
-            LOG.info("upload instantData for url: " + url + " parameters with data count: " + parameters.size());
+            logger.info("Upload instantData for {} parameters with data count {}", errorPath, parameters.size());
 
             if (parameters.isEmpty()) {
                 Utils.getDataUploaderAppEJB().updateCommand(0, rowID, "Error",
@@ -220,15 +222,15 @@ public final class InstantDataService {
                                 " слинкованных параетров по объекту " + objectName);
             }
         } catch (ConnectException e) {
-            LOG.log(Level.WARNING, "socket connect exception", e);
+            logger.warn("Socket connect exception", e);
             try {
                 Utils.getDataUploaderAppEJB().updateCommand(0, rowID, "Error",
                         "Невозможно подключиться к прибору");
             } catch (NamingException ex) {
-                LOG.log(Level.WARNING, "load RMI exception", ex);
+                logger.warn("load RMI exception", ex);
             }
         } catch (NamingException | IOException e) {
-            LOG.log(Level.WARNING, "error with load instant data", e);
+            logger.warn("Exception loading instant data", e);
         }
     }
 }

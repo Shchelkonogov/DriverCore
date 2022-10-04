@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30" shutdownHook="disable">
+    <!-- Logging Properties -->
+    <Properties>
+        <Property name="LOG_PATTERN">%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ} [%c{10}.%M ExecuteThread: '%T'] %p: %m%n</Property>
+        <Property name="APP_LOG_ROOT">logs</Property>
+    </Properties>
+
+    <Appenders>
+        <!-- Console Appender -->
+        <Console name="Console" target="SYSTEM_OUT" follow="true">
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+        </Console>
+
+        <!-- File Appenders on need basis -->
+        <RollingFile name="errorLog" fileName="${APP_LOG_ROOT}/app-error.log"
+                     filePattern="${APP_LOG_ROOT}/$${date:yyyy-MM}/app-error-%d{yyyy-MM-dd}-%i.log.gz">
+            <LevelRangeFilter minLevel="ERROR" maxLevel="WARN" onMatch="ACCEPT" onMismatch="DENY"/>
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <Policies>
+<!--                <OnStartupTriggeringPolicy minSize="0"/>-->
+                <OnStartupTriggeringPolicy/>
+                <TimeBasedTriggeringPolicy/>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+
+        <RollingFile name="traceLog" fileName="${APP_LOG_ROOT}/app-trace.log"
+                     filePattern="${APP_LOG_ROOT}/$${date:yyyy-MM}/app-trace-%d{yyyy-MM-dd}-%i.log.gz">
+            <PatternLayout pattern="${LOG_PATTERN}"/>
+            <Policies>
+<!--                <OnStartupTriggeringPolicy minSize="0"/>-->
+                <OnStartupTriggeringPolicy/>
+                <TimeBasedTriggeringPolicy/>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <Logger name="io.netty" additivity="false" level="warn">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="errorLog"/>
+        </Logger>
+
+        <Root level="trace">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="errorLog"/>
+            <AppenderRef ref="traceLog"/>
+        </Root>
+    </Loggers>
+</Configuration>

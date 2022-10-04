@@ -1,5 +1,9 @@
 package ru.tecon.isacom;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import ru.tecon.mfk1500Server.DriverProperty;
+
 import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -9,14 +13,13 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Logger;
 
 /**
  * Класс реализации функций протокола isacom, разработанный ТЕКОНом
  */
 public class IsacomProtocol {
 
-    private static final Logger LOG = Logger.getLogger(IsacomProtocol.class.getName());
+    private static Logger logger = LoggerFactory.getLogger(IsacomProtocol.class);
 
     private static final Map<String, String> methodsMap;
 
@@ -30,6 +33,36 @@ public class IsacomProtocol {
                 methodsMap.put(md.getAnnotation(Isacom.class).name().toString(), md.getName());
             }
         }
+    }
+
+    /**
+     * Реализация функции 5 протокола "Запрос клиентом версии протокола"
+     * @param in входной поток
+     * @param out выходной поток
+     * @return версия протокола
+     * @throws IOException в случае проблем работы с потоками
+     * @throws IsacomException в случае ошибки чтения версии протокола
+     */
+    public static int getProtocolVersion(InputStream in, OutputStream out) throws IOException, IsacomException {
+        ByteBuffer head = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(5)
+                .putInt(Integer.valueOf("1000001", 2) | DriverProperty.getInstance().getResourceNumber() << 8)
+                .putInt(0)
+                .putInt(0);
+
+        out.write(head.array());
+        out.flush();
+
+        byte[] response = new byte[16];
+
+        if ((in.read(response) != 16) ||
+                (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
+            errorLog(ByteBuffer.wrap(Arrays.copyOfRange(response, 4, 8)).order(ByteOrder.LITTLE_ENDIAN).getInt());
+            logger.warn("Problem reading protocol version {}", Arrays.toString(response));
+            throw new IsacomException("Problem reading protocol version");
+        }
+
+        return ByteBuffer.wrap(Arrays.copyOfRange(response, 4, 8)).order(ByteOrder.LITTLE_ENDIAN).getInt();
     }
 
     /**
@@ -49,7 +82,7 @@ public class IsacomProtocol {
 
         ByteBuffer head = ByteBuffer.allocate(16 + size).order(ByteOrder.LITTLE_ENDIAN)
                 .putInt(6)
-                .putInt(Integer.valueOf("0000001001000001", 2))
+                .putInt(Integer.valueOf("1000001", 2) | DriverProperty.getInstance().getResourceNumber() << 8)
                 .putInt(size)
                 .putInt(0);
 
@@ -65,10 +98,11 @@ public class IsacomProtocol {
         out.flush();
 
         byte[] response = new byte[16];
-        if ((in.read(response) != 16) &&
+        if ((in.read(response) != 16) ||
                 (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
-            LOG.warning("Проблема чтения ответа на создание переменных: " + Arrays.toString(response));
-            throw new IsacomException("Проблема чтения ответа на создание переменных");
+            errorLog(ByteBuffer.wrap(Arrays.copyOfRange(response, 4, 8)).order(ByteOrder.LITTLE_ENDIAN).getInt());
+            logger.warn("Problem reading response to creating variables {}", Arrays.toString(response));
+            throw new IsacomException("Problem reading response to creating variables");
         }
     }
 
@@ -92,10 +126,11 @@ public class IsacomProtocol {
         out.write(request);
         out.flush();
 
-        if ((in.read(response) != 16) &&
+        if ((in.read(response) != 16) ||
                 (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
-            LOG.warning("Проблема чтения ответа на чтение переменных по списку: " + Arrays.toString(response));
-            throw new IsacomException("Проблема чтения ответа на чтение переменных по списку");
+            errorLog(ByteBuffer.wrap(Arrays.copyOfRange(response, 4, 8)).order(ByteOrder.LITTLE_ENDIAN).getInt());
+            logger.warn("Problem reading response to reading variables by list {}", Arrays.toString(response));
+            throw new IsacomException("Problem reading response to reading variables by list");
         }
 
         byte[] resultData = new byte[ByteBuffer.wrap(Arrays.copyOfRange(response, 8, 12)).order(ByteOrder.LITTLE_ENDIAN).getInt()];
@@ -120,7 +155,7 @@ public class IsacomProtocol {
                         modelItem.setValue(loadSimpleType(modelItem.getTypeName(), buffer));
                     }
                 } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
-                    LOG.warning("Ошибка разбора типа: " + modelItem.getTypeName() + ". Сообщение ошибки: " + e.getMessage());
+                    logger.warn("Type parse error {}", modelItem.getTypeName(), e);
                 }
 
                 index += modelItem.getTypeSize();
@@ -167,8 +202,8 @@ public class IsacomProtocol {
                     valueBuffer.putInt(Integer.valueOf(isacomModel.getValue()));
                     break;
                 default:
-                    LOG.warning("Неподдерживаемый тип для записи значения " + isacomModel.getTypeName());
-                    throw new IsacomException("Неподдерживаемый тип для записи значения " + isacomModel.getTypeName());
+                    logger.warn("Unsupported type for value entry {}", isacomModel.getTypeName());
+                    throw new IsacomException("Unsupported type for value entry " + isacomModel.getTypeName());
             }
             head.put(valueBuffer.array());
         }
@@ -177,10 +212,11 @@ public class IsacomProtocol {
         out.flush();
 
         byte[] response = new byte[16];
-        if ((in.read(response) != 16) &&
+        if ((in.read(response) != 16) ||
                 (ByteBuffer.wrap(Arrays.copyOfRange(response, 0, 4)).order(ByteOrder.LITTLE_ENDIAN).getInt() != 1)) {
-            LOG.warning("Проблема записи новых значений системных переменных: " + Arrays.toString(response));
-            throw new IsacomException("Проблема записи новых значений системных переменных");
+            errorLog(ByteBuffer.wrap(Arrays.copyOfRange(response, 4, 8)).order(ByteOrder.LITTLE_ENDIAN).getInt());
+            logger.warn("Problem writing new values of system variables {}", Arrays.toString(response));
+            throw new IsacomException("Problem writing new values of system variables");
         }
     }
 
@@ -199,8 +235,27 @@ public class IsacomProtocol {
                     .getDeclaredMethod(methodsMap.get(type), ByteBuffer.class)
                     .invoke(null, buffer));
         } else {
-            LOG.warning("Отсутствует метод для разбора мгновенного значения " + type);
+            logger.warn("Missing method to parse instant value {}", type);
             return null;
+        }
+    }
+
+    private static void errorLog(int code) {
+        switch (code) {
+            case 1:
+                logger.warn("Wrong message");
+                break;
+            case 2:
+                logger.warn("Internal server error");
+                break;
+            case 3:
+                logger.warn("No data");
+                break;
+            case 4:
+                logger.warn("Symbol table missing");
+                break;
+            default:
+                logger.warn("unknown error {}", code);
         }
     }
 

@@ -6,7 +6,7 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.stage.Stage;
-import ru.tecon.ProjectProperty;
+import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.exception.MyServerStartException;
 import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.BlockType;
@@ -102,8 +102,8 @@ public class RootLayoutController {
         });
 
         EchoSocketServer.setEvent(event);
-        EchoSocketServer.addServiceLoadListener(() -> Platform.runLater(() -> primaryStage.setTitle("Сервер MFK1500 (" + ProjectProperty.getServerName() + ")")));
-        EchoSocketServer.setCloseApplication(false);
+        EchoSocketServer.addServiceLoadListener(() -> Platform.runLater(() -> primaryStage.setTitle("Сервер MFK1500 (" + DriverProperty.getInstance().getServerName() + ")")));
+//        EchoSocketServer.setCloseApplication(false);
     }
 
     @FXML
@@ -120,7 +120,7 @@ public class RootLayoutController {
 
                 Properties prop = new Properties();
                 prop.setProperty("config", System.getProperty("user.dir") + "/resources/config.properties");
-                EchoSocketServer.startService(prop);
+                EchoSocketServer.startService();
             } catch (MyServerStartException e) {
                 startButton.setDisable(false);
                 stopButton.setDisable(true);

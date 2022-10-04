@@ -1,8 +1,10 @@
 package ru.tecon.controllerData;
 
 import com.jcraft.jsch.*;
-import ru.tecon.ProjectProperty;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.tecon.Utils;
+import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.isacom.*;
 import ru.tecon.model.ObjectInfoModel;
 import ru.tecon.server.EchoSocketServer;
@@ -22,8 +24,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 /**
@@ -31,11 +31,11 @@ import java.util.stream.Collectors;
  */
 public final class ControllerConfig {
 
-    private static final Logger LOG = Logger.getLogger(ControllerConfig.class.getName());
+    private static Logger logger = LoggerFactory.getLogger(ControllerConfig.class);
 
     private static Map<String, List<String>> config = new HashMap<>();
     private static Set<String> configList = new HashSet<>();
-    private static List<String> instantConfigList = new LinkedList<>();
+    private static Set<String> instantConfigList = new HashSet<>();
 
     private static ScheduledExecutorService service;
     private static ScheduledFuture future;
@@ -43,7 +43,6 @@ public final class ControllerConfig {
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
 
     private ControllerConfig() {
-
     }
 
     /**
@@ -52,9 +51,9 @@ public final class ControllerConfig {
      * @throws IOException если ошибка в чтении файла
      */
     public static boolean parsControllerConfig() throws IOException {
-        LOG.info("read config file " + ProjectProperty.getConfigFile());
+        logger.info("Read config file {}", DriverProperty.getInstance().getHistoryConfigPath());
 
-        BufferedReader reader = Files.newBufferedReader(ProjectProperty.getConfigFile());
+        BufferedReader reader = Files.newBufferedReader(DriverProperty.getInstance().getHistoryConfigPath());
 
         String line;
         String key1 = null;
@@ -98,9 +97,10 @@ public final class ControllerConfig {
 
         for (String k: config.keySet()) {
             configList.addAll(config.get(k));
+            // TODO Подумать что будет если одинаковые имена в одной группе.
         }
 
-        instantConfigList = new LinkedList<>(Files.readAllLines(ProjectProperty.getInstantConfigFile()));
+        instantConfigList = new HashSet<>(Files.readAllLines(DriverProperty.getInstance().getInstantConfigPath()));
         instantConfigList.removeIf(s -> s.trim().isEmpty());
 
         return !config.isEmpty();
@@ -120,13 +120,13 @@ public final class ControllerConfig {
      * Метод запускает службу которая обрабатывает запросы на конфигурацию из базы
      */
     public static void startUploaderService() {
-        if (ProjectProperty.isCheckRequestService()) {
+        if (DriverProperty.getInstance().isCheckRequestService()) {
             service = Executors.newSingleThreadScheduledExecutor();
             future = service.scheduleWithFixedDelay(() -> {
                 try {
-                    Utils.loadRMI().checkConfigRequest(ProjectProperty.getServerName());
+                    Utils.loadRMI().checkConfigRequest(DriverProperty.getInstance().getServerName());
                 } catch (NamingException e) {
-                    LOG.log(Level.WARNING, "error with config service", e);
+                    logger.warn("Error with config service", e);
                 }
             }, 5, 30, TimeUnit.SECONDS);
         }
@@ -140,10 +140,10 @@ public final class ControllerConfig {
             Set<String> config = getInstantConfigFromURL(url);
             config.addAll(configList);
 
-            Utils.loadRMI().putConfig(config, url, ProjectProperty.getServerName());
-            LOG.info("configuration for url: " + url + " is uploaded");
+            Utils.loadRMI().putConfig(config, url, DriverProperty.getInstance().getServerName());
+            logger.info("Configuration for url {} loaded", url);
         } catch (NamingException e) {
-            LOG.log(Level.WARNING, "error load RMI", e);
+            logger.warn("Error load RMI", e);
         }
     }
 
@@ -157,23 +157,23 @@ public final class ControllerConfig {
      * @return список параметров конфигурации
      */
     private static Set<String> getInstantConfigFromURL(String url) {
-        LOG.info("request load instant config from: " + url);
+        logger.info("Request instant config for {}", url);
 
         Set<String> result = new HashSet<>();
 
         if (EchoSocketServer.isBlocked(url, BlockType.TRAFFIC)) {
-            LOG.info("traffic block");
+            logger.warn("Traffic block for {}", url);
             return result;
         }
 
         try {
-            Session session = new JSch().getSession(ProjectProperty.SSH_LOGIN, url, ProjectProperty.SSH_PORT);
-            session.setPassword(ProjectProperty.SSH_PASSWORD);
+            Session session = new JSch().getSession(DriverProperty.getInstance().getSshLogin(), url, DriverProperty.getInstance().getSshPort());
+            session.setPassword(DriverProperty.getInstance().getSshPassword());
             session.setConfig("StrictHostKeyChecking", "no");
             session.connect();
 
             Channel channel = session.openChannel("exec");
-            ((ChannelExec)channel).setCommand("cat /user/IDS00201");
+            ((ChannelExec)channel).setCommand("cat /user/IDS00" + DriverProperty.getInstance().getResourceNumber() + "01");
             channel.connect();
 
             StringBuilder sb = new StringBuilder();
@@ -191,16 +191,16 @@ public final class ControllerConfig {
                         }
                     });
                 } catch (IOException e) {
-                    LOG.log(Level.WARNING, "error ssh file read", e);
+                    logger.warn("Error read ssh file", e);
                 }
             } catch (IOException e) {
-                LOG.log(Level.WARNING, "error with my monitor", e);
+                logger.warn("Error with my monitor", e);
             }
 
             channel.disconnect();
             session.disconnect();
 
-            LOG.info("symbol table from url: " + url + " is loaded");
+            logger.info("Symbol table from url {} loaded", url);
 
             String types = sb.substring(sb.indexOf("[TYPE]") + "[TYPE]".length(), sb.indexOf("[DEVTYP]"));
 
@@ -232,10 +232,10 @@ public final class ControllerConfig {
                                 // Формат записи имя переменной :Текущие данные:: имя типа
                                 result.add(globalConfigItem + ":Текущие данные::" + typeName);
                             } else {
-                                LOG.warning(globalConfigItem + " " + variableItemName + " тип не простой или тип не реализован");
+                                logger.warn("{} {} not a simple type or not implemented", globalConfigItem, variableItemName);
                             }
                         } else {
-                            LOG.warning(globalConfigItem + " " + variableItemName + " не нашел тип");
+                            logger.warn("{} {} not found", globalConfigItem, variableItemName);
                         }
 
                         it.remove();
@@ -291,23 +291,23 @@ public final class ControllerConfig {
 
                                             continue outer;
                                         } else {
-                                            LOG.warning(globalConfigItem + " " + variableItemName + " тип переменной функционального блока не простой или тип не реализован");
+                                            logger.warn("{} {} function block variable type doesn't belong to simple type or not implemented", globalConfigItem, variableItemName);
                                         }
                                     } else {
-                                        LOG.warning(globalConfigItem + " " + variableItemName + " не нашел тип");
+                                        logger.warn("{} {} not found", globalConfigItem, variableItemName);
                                     }
                                 } else {
-                                    LOG.warning(globalConfigItem + " " + variableItemName + " не нашел нужную переменную в функциональном блоке");
+                                    logger.warn("{} {} not found variable in function block", globalConfigItem, variableItemName);
                                 }
                             } else {
-                                LOG.warning(globalConfigItem + " " + variableItemName + " не нашел тип или тип не структура");
+                                logger.warn("{} {} not found or type not a struct", globalConfigItem, variableItemName);
                             }
                         }
                     }
                 }
             }
         } catch (JSchException e) {
-            LOG.log(Level.WARNING, "error ssh connect", e);
+            logger.warn("Error ssh connect", e);
         }
 
         return result;
@@ -382,7 +382,7 @@ public final class ControllerConfig {
                 }
             }
         } catch (IOException | IsacomException | JSchException e) {
-            LOG.warning("Ошибка общения с прибором по isacom или ssh " + e.getMessage());
+            logger.warn("Error isacom or ssh", e);
         }
 
         return result;
@@ -419,12 +419,12 @@ public final class ControllerConfig {
                 }
             }
 
-            LOG.info("Записываем новые значения " + isacomModels.toString() + " в прибор по адресу " + url);
+            logger.info("Write new values {} to device on address {}", isacomModels, url);
 
             IsacomProtocol.extendedVariableWriting(in, out, isacomModels);
 
         } catch (IOException | IsacomException e) {
-            LOG.warning("Ошибка записи новых значений в прибор " + url + " " + e.getMessage());
+            logger.warn("Error write new values to device {}", url, e);
         }
     }
 
@@ -436,7 +436,7 @@ public final class ControllerConfig {
         try {
             jschShellExecCommand(url, "rdate -4 -n 10.98.254.2");
         } catch (IOException | JSchException e) {
-            LOG.warning("Ошибка синхронизации времени " + e.getMessage());
+            logger.warn("Error time synchronization", e);
         }
     }
 
@@ -451,8 +451,8 @@ public final class ControllerConfig {
     private static StringBuilder jschShellExecCommand(String host, String command) throws IOException, JSchException {
         StringBuilder sb = new StringBuilder();
 
-        Session session = new JSch().getSession(ProjectProperty.SSH_LOGIN, host, ProjectProperty.SSH_PORT);
-        session.setPassword(ProjectProperty.SSH_PASSWORD);
+        Session session = new JSch().getSession(DriverProperty.getInstance().getSshLogin(), host, DriverProperty.getInstance().getSshPort());
+        session.setPassword(DriverProperty.getInstance().getSshPassword());
         session.setConfig("StrictHostKeyChecking", "no");
         session.connect();
 

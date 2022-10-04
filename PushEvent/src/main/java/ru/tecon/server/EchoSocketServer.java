@@ -1,29 +1,34 @@
 package ru.tecon.server;
 
-import ru.tecon.ProjectProperty;
-import ru.tecon.Utils;
+import org.apache.logging.log4j.LogManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.tecon.controllerData.ControllerConfig;
+import ru.tecon.mfk1500Server.DriverProperty;
+import ru.tecon.mfk1500Server.message.MessageService;
 import ru.tecon.exception.MyServerStartException;
 import ru.tecon.instantData.InstantDataService;
-import ru.tecon.jms.MessageReceiveService;
 import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.Event;
 import ru.tecon.traffic.Statistic;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.logging.Level;
-import java.util.logging.LogManager;
-import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 /**
@@ -32,80 +37,42 @@ import java.util.stream.Stream;
  */
 public class EchoSocketServer {
 
-    private static Logger log = Logger.getLogger(EchoSocketServer.class.getName());
-
-    private static final MessageReceiveService JMS_SERVICE = new MessageReceiveService();
+    private static Logger logger = LoggerFactory.getLogger(EchoSocketServer.class);
 
     private static ConcurrentMap<String, Statistic> statistic = new ConcurrentHashMap<>();
 
     private static ServerSocket serverSocket;
 
     private static ScheduledExecutorService service;
-    private static ScheduledFuture dayFuture;
-    private static ScheduledFuture hourFuture;
     private static ScheduledFuture future20Minute;
-
-    private static boolean closeApplication = true;
 
     private static Event event;
     private static ServiceLoadListener serviceLoadListener;
 
-    /**
-     * Для запуска из любого места используются три параметра.
-     * Первый параметр указывает на путь к файлу с конфигурациями config.properties config=[?]
-     * Второй параметр указывает на папку из под которой планируется запуск приложение userDir=[?]
-     * Третий параметр указывает на путь к файлу с конфигурацие для логов log.properties log=[?]
-     * Второй и третий параметр не обязательный
-     * @param args вводные параметры
-     */
     public static void main(String[] args) {
-        Properties prop = new Properties();
-
-        for (String s: args) {
-            if (s.contains("=")) {
-                prop.setProperty(s.split("=")[0], s.split("=")[1]);
-            }
-        }
-
         try {
-            if (prop.containsKey("log")) {
-                try (InputStream in = Files.newInputStream(Paths.get(prop.getProperty("log")))) {
-                    LogManager.getLogManager().readConfiguration(in);
-                }
-            } else {
-                LogManager.getLogManager().readConfiguration(EchoSocketServer.class.getResourceAsStream("/log.properties"));
-            }
-
-            if (!prop.containsKey("config")) {
-                log.warning("config=<> parameter is required");
-                System.exit(1);
-            }
-
-            log.log(Level.INFO, "start parameters {0}", prop);
-
-            startService(prop);
-        } catch (IOException e) {
-            log.log(Level.WARNING, "load logging config error:", e);
+            startService();
         } catch (MyServerStartException e) {
-            log.log(Level.WARNING, "server start exception:", e);
+            logger.warn("error start driver server", e);
         }
     }
 
-    public static void startService(Properties prop) throws MyServerStartException {
+    public static void startService() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                Thread.sleep(200);
-                log.info("Shutting down...");
+//            try {
+//                Thread.sleep(200);
+                logger.info("Shutting down...");
                 stopSocket();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.log(Level.WARNING, "error shutdown hook", e);
-            }
+                logger.info("Shutting down ok");
+                LogManager.shutdown();
+//            } catch (InterruptedException e) {
+//                Thread.currentThread().interrupt();
+//                logger.warn("error shutdown hook", e);
+//            }
         }));
 
-        ProjectProperty.loadProperties(prop);
-        log.info("project properties load");
-        System.out.println("Конфигурация приложения загружена");
+        DriverProperty driverProperty = DriverProperty.getInstance();
+        logger.info("driver properties loaded {}", driverProperty);
 
         if (serviceLoadListener != null) {
             serviceLoadListener.onLoad();
@@ -114,59 +81,96 @@ public class EchoSocketServer {
         // Парсим файл конфигурации
         try {
             if (!ControllerConfig.parsControllerConfig()) {
-                Utils.error("error controller config load. Parse error");
+                throw new MyServerStartException("controller config loading error");
             }
         } catch (IOException e) {
-            Utils.error("error controller config load message:", e);
+            throw new MyServerStartException("controller config loading error", e);
         }
-        log.info("controller config load");
-        System.out.println("Конфигурация контроллера загружена");
+        logger.info("controller config loaded");
 
-        File[] files = new File(ProjectProperty.getStatisticSerFolder()).listFiles();
-        if (files != null) {
-            for (File fileEntry: files) {
-                if (!fileEntry.isDirectory()) {
-                    String ip = fileEntry.getName().replaceFirst("[.][^.]+$", "").replaceAll("_", ".");
-                    try {
-                        statistic.put(ip, deserialize(fileEntry.toPath().toAbsolutePath().toString()).orElseThrow(NoSuchElementException::new));
-                    } catch (NoSuchElementException e) {
-                        log.log(Level.WARNING, "error deserialize for {0} empty object", ip);
-                    }
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(DriverProperty.getInstance().getStatisticSerPath(),
+                entry -> Files.isRegularFile(entry) && entry.toString().endsWith(".ser"))) {
+            stream.forEach(path -> {
+                try {
+                    statistic.put(path.getFileName().toString().replaceFirst("[.][^.]+$", "").replaceAll("_", "."),
+                            deserialize(path).orElseThrow(NoSuchElementException::new));
+                } catch (NoSuchElementException ex) {
+                    logger.warn("error deserialize object {}", path, ex);
                 }
-            }
+            });
+        } catch (IOException ex) {
+            logger.warn("error deserialize", ex);
         }
 
         // Догружаю в статистику объекты, которые ранее передавали данные (по именам папок логов pushEvent)
         // Требуется для защиты в случае утери логов.
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(ProjectProperty.getPushEventLogFolder()),
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(DriverProperty.getInstance().getPushEventLogPath(),
                 entry -> !statistic.keySet().contains(entry.getFileName().toString()))) {
             stream.forEach(path -> getStatistic(path.getFileName().toString()).update());
         } catch (IOException e) {
-            log.warning("error load statistic from pushEvent logs directory " + e.getMessage());
+            logger.warn("error load statistic from pushEvent logs directory", e);
         }
-        log.info("controller config load");
-        System.out.println("Конфигурация контроллера загружена");
+
+        MessageService.startService();
+        logger.info("Message service start");
 
         // Подключаемся к jms через JMS_SERVICE
-        JMS_SERVICE.initService();
-        log.info("jms service start");
-        System.out.println("Сервер получения данных доступен");
+//        JMS_SERVICE.initService();
+//        logger.info("jms service start");
 
         ControllerConfig.startUploaderService();
-        log.info("controller config service start");
-        System.out.println("Сервис обработки запросов конфигурации контроллера запущен");
+        logger.info("controller config service start");
 
         InstantDataService.startService();
-        log.info("Instant data service start");
-        System.out.println("Сервис обработки запросов на мгновенные данные запущен");
+        logger.info("Instant data service start");
 
-        long midnight= LocalDateTime.now().until(LocalDate.now().plusDays(1).atStartOfDay(), ChronoUnit.MINUTES) + 1;
-        long nextHour = LocalDateTime.now().until(LocalDateTime.now().plusHours(1).withMinute(0), ChronoUnit.MINUTES);
+        // Определяем сколько минут осталось до ближайщего 20 минутного интервала (00/20/40 минут)
+        long untilNextTime = 21;
+        for (int i = 0; untilNextTime >= 20; i++) {
+            untilNextTime = LocalDateTime.now().until(
+                    LocalDateTime.now()
+                            .plusHours(1)
+                            .withMinute(0)
+                            .minusMinutes(i * 20), ChronoUnit.MINUTES);
+        }
 
-        service = Executors.newScheduledThreadPool(3);
+        service = Executors.newSingleThreadScheduledExecutor();
+        future20Minute = service.scheduleAtFixedRate(() -> {
+            boolean triggerHour = false;
+            boolean triggerDay = false;
 
-        dayFuture = service.scheduleAtFixedRate(() ->
-                statistic.forEach((s, st) -> {
+            logger.info("Removing of blocks triggers every 20 minutes");
+            if (LocalTime.now().getMinute() == 0) {
+                logger.info("Reserving of statistic logs triggers every hour");
+                triggerHour = true;
+                if (LocalTime.now().getHour() == 0) {
+                    logger.info("Updating of statistics triggers every day");
+                    triggerDay = true;
+                }
+            }
+
+            for (Map.Entry<String, Statistic> entry: statistic.entrySet()) {
+                String k = entry.getKey();
+                Statistic st = entry.getValue();
+
+                // Автоматическое снятие блокировок Ошибка сервера и Разрыв соединения.
+                // Срабатывает раз в 20 минут.
+                st.unblock(BlockType.SERVER_ERROR, BlockType.LINK_ERROR);
+
+                // Резервирование логов статистики.
+                // Срабатывает раз в час.
+                if (triggerHour) {
+                    serialize(st);
+                    if (st.isSocketHung()) {
+                        logger.info("close hung socket for {}", k);
+                        st.close();
+                        st.update();
+                    }
+                }
+
+                // Ежедневное обновление статистики и файлов логов.
+                // Срабатывает в начале каждого дня.
+                if (triggerDay) {
                     st.close();
                     st.clearSocketCount();
                     st.clearLastDayDataGroups();
@@ -177,94 +181,82 @@ public class EchoSocketServer {
                     st.updateObjectName();
                     st.unblockAll();
 
+                    Path pushEventPath = DriverProperty.getInstance().getPushEventLogPath().resolve(k);
+
                     // Удаляем файл с последними переданными группами данных
                     try {
-                        Files.deleteIfExists(Paths.get(ProjectProperty.getPushEventLogFolder() +
-                                "/" + s + "/" + ProjectProperty.PUSH_EVENT_LAST_CONFIG));
+                        Files.deleteIfExists(pushEventPath.resolve(DriverProperty.getInstance().getPushEventLastConfig()));
                     } catch (IOException e) {
-                        log.warning("error remove last config file for " + s);
+                        logger.warn("error remove last config file for", e);
                     }
 
                     // Удаление файлов логов pushEvent старше 30 дней
-                    try (Stream<Path> stream = Files.walk(Paths.get(ProjectProperty.getPushEventLogFolder() + "/" + s))
-                            .filter(path -> {
-                                if (Files.isRegularFile(path) && (path.toString().endsWith(".txt"))) {
-                                    try {
-                                        FileTime creationTime = (FileTime) Files.getAttribute(path, "lastModifiedTime");
+                    if (Files.exists(pushEventPath)) {
+                        try (Stream<Path> stream = Files.walk(pushEventPath)
+                                .filter(path -> {
+                                    if (Files.isRegularFile(path) && (path.toString().endsWith(".txt"))) {
+                                        try {
+                                            FileTime creationTime = (FileTime) Files.getAttribute(path, "lastModifiedTime");
 
-                                        return LocalDateTime.ofInstant(creationTime.toInstant(), ZoneId.systemDefault())
-                                                .isBefore(LocalDateTime.now().minusDays(30));
-                                    } catch (IOException e) {
+                                            return LocalDateTime.ofInstant(creationTime.toInstant(), ZoneId.systemDefault())
+                                                    .isBefore(LocalDateTime.now().minusDays(30));
+                                        } catch (IOException e) {
+                                            return false;
+                                        }
+                                    } else {
                                         return false;
                                     }
-                                } else {
-                                    return false;
+                                })) {
+                            stream.forEach(path -> {
+                                try {
+                                    Files.delete(path);
+                                } catch (IOException e) {
+                                    logger.warn("error delete file {}", path, e);
                                 }
-                            })) {
-                        stream.forEach(path -> {
-                            try {
-                                Files.delete(path);
-                            } catch (IOException e) {
-                                log.warning("error delete file " + path);
-                            }
-                        });
-                    } catch (IOException e) {
-                        log.warning("error walk files");
+                            });
+                        } catch (IOException e) {
+                            logger.warn("error walk files {}", pushEventPath, e);
+                        }
                     }
-                }), midnight, TimeUnit.DAYS.toMinutes(1), TimeUnit.MINUTES);
-
-        // Сервис для резервирования логов статистики раз в час
-        hourFuture = service.scheduleAtFixedRate(() ->
-                        statistic.forEach((k, v) -> {
-                            serialize(v);
-                            if (v.isSocketHung()) {
-                                log.info("close hung socket for " + k);
-                                v.close();
-                                v.update();
-                            }
-                        }),
-                nextHour, TimeUnit.HOURS.toMinutes(1), TimeUnit.MINUTES);
-
-        // Сервис для автоматического снятия блокировок Ошибка сервера и Разрыв соединения. Раз в 20 минут.
-        future20Minute = service.scheduleAtFixedRate(() -> statistic.forEach((k, v) -> v.unblock(BlockType.SERVER_ERROR, BlockType.LINK_ERROR)),
-                nextHour + 5, 20, TimeUnit.MINUTES);
-
-        log.info("Statistic service start");
-        System.out.println("Сервис статистики запущен");
+                }
+            }
+        }, untilNextTime, 20, TimeUnit.MINUTES);
+        logger.info("Statistic service start");
 
         // Запускаем serverSocket
         Socket socket;
 
         try {
-            serverSocket = new ServerSocket(ProjectProperty.getPort(), 100);
+            serverSocket = new ServerSocket(DriverProperty.getInstance().getListeningPort(), 100);
         } catch (IOException e) {
-            Utils.error("error start server socket Message:", e);
+            logger.warn("error start server socket", e);
+            throw new MyServerStartException("error start server socket", e);
         }
 
-        log.info("server socket start");
-        System.out.println("Сервис приема данных по PushEvent запущен");
-        System.out.println("Сервер MFK1500 запущен");
+        logger.info("server socket start");
+        logger.info("MFK1500 server started");
 
         while (!serverSocket.isClosed()) {
             try {
                 socket = Objects.requireNonNull(serverSocket).accept();
             } catch (IOException e) {
                 if (!serverSocket.isClosed()) {
-                    log.log(Level.WARNING, "error create socket connection Message:", e);
+                    logger.warn("error create socket connection", e);
                 } else {
-                    log.info("Server socket is closed");
+                    logger.warn("Server socket is closed");
                 }
                 continue;
             }
 
             String host = socket.getInetAddress().getHostAddress();
-            log.info("new connection from " + host);
 
             if (!isBlocked(host) && !getStatistic(host).isSocketOpen()) {
-                EchoThread thread = new EchoThread(socket, ProjectProperty.getServerName());
+                EchoThread thread = new EchoThread(socket, DriverProperty.getInstance().getServerName());
                 thread.start();
 
-                log.info("Thread create " + thread.getId() + " for ip: " + host);
+                logger.info("Thread create {} for ip {}", thread.getId(), host);
+            } else {
+                logger.info("Connection {} ignore", host);
             }
         }
     }
@@ -273,13 +265,12 @@ public class EchoSocketServer {
      * Метод останавливает работу приложения
      */
     public static void stopSocket() {
-        JMS_SERVICE.stopService();
+//        JMS_SERVICE.stopService();
         ControllerConfig.stopUploaderService();
         InstantDataService.stopService();
+        MessageService.stopService();
 
         if (Objects.nonNull(service)) {
-            dayFuture.cancel(true);
-            hourFuture.cancel(true);
             future20Minute.cancel(true);
             service.shutdown();
         }
@@ -288,17 +279,17 @@ public class EchoSocketServer {
             if (serverSocket != null) {
                 serverSocket.close();
                 statistic.forEach((k, v) -> {
+                    logger.info("Serialize {}", k);
                     v.close();
                     serialize(v);
                 });
                 statistic.clear();
             }
         } catch (IOException e) {
-            log.log(Level.WARNING, "error with close sockets:", e);
+            logger.warn("Error with close sockets", e);
         }
 
-        log.info("EchoSocketServer stop");
-        System.out.println("Сервер MFK1500 остановлен");
+        logger.info("MFK1500 server stop");
     }
 
     public static Statistic getStatistic(String ip) {
@@ -324,35 +315,32 @@ public class EchoSocketServer {
      * @param ip ip объекта статистики для удаления
      */
     public static void removeStatistic(String ip) {
-        log.log(Level.INFO, "remove object {0}", ip);
+        logger.info("remove object {}", ip);
 
         // Удаление статистики из памяти
         statistic.remove(ip);
 
         // Удаление файла .ser
         try {
-            Files.deleteIfExists(Paths.get(ProjectProperty.getStatisticSerFolder() +
-                    "/" +
-                    ip.replaceAll("[.]", "_") +
-                    ".ser"));
+            Files.deleteIfExists(DriverProperty.getInstance().getStatisticSerPath().resolve(ip.replaceAll("[.]", "_") + ".ser"));
         } catch (IOException e) {
-            log.log(Level.WARNING, "can't remove .ser file", e);
+            logger.warn("can't remove .ser file", e);
         }
 
         // Удаление всех pushEvent логов
-        try (Stream<Path> walk = Files.walk(Paths.get(ProjectProperty.getPushEventLogFolder() + "/" + ip))) {
+        try (Stream<Path> walk = Files.walk(DriverProperty.getInstance().getPushEventLogPath().resolve(ip))) {
             walk.sorted(Comparator.reverseOrder())
-                    .peek(path -> log.info("remove " + path))
+                    .peek(path -> logger.info("remove {}", path))
                     .forEach(path -> {
                         try {
                             Files.delete(path);
                         } catch (IOException e) {
-                            log.warning("error remove file: " + path + " message: " + e.getMessage());
+                            logger.warn("Error remove file {}", path, e);
                         }
                     });
         } catch (NoSuchFileException ignore) {
         } catch (IOException e) {
-            log.warning("error remove push event logs for ip: " + ip + " message: " + e.getMessage());
+            logger.warn("Error remove pushEvent logs for ip {}", ip, e);
         }
 
         if (event != null) {
@@ -364,24 +352,16 @@ public class EchoSocketServer {
         EchoSocketServer.event = event;
     }
 
-    public static boolean isCloseApplication() {
-        return closeApplication;
-    }
-
-    public static void setCloseApplication(boolean closeApplication) {
-        EchoSocketServer.closeApplication = closeApplication;
-    }
-
     /**
      * Сериализация объекта статистики в файл
      * @param statistic объект для сериализации
      */
     private static void serialize(Statistic statistic) {
         try (ObjectOutputStream oos = new ObjectOutputStream(
-                new FileOutputStream(ProjectProperty.getStatisticSerFolder() + "/" + statistic.getIp().replaceAll("[.]", "_") + ".ser"))) {
+                Files.newOutputStream(DriverProperty.getInstance().getStatisticSerPath().resolve(statistic.getIp().replaceAll("[.]", "_") + ".ser")))) {
             oos.writeObject(statistic);
         } catch (IOException e) {
-            log.log(Level.WARNING, "serialize error", e);
+            logger.warn("Serialize error", e);
         }
     }
 
@@ -390,8 +370,8 @@ public class EchoSocketServer {
      * @param path путь к файлу
      * @return объект статистики или null если ошибка десиреализации
      */
-    private static Optional<Statistic> deserialize(String path) {
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
+    private static Optional<Statistic> deserialize(Path path) {
+        try (ObjectInputStream ois = new ObjectInputStream(Files.newInputStream(path))) {
 
             Statistic statistic = (Statistic) ois.readObject();
 
@@ -404,7 +384,7 @@ public class EchoSocketServer {
 
             return Optional.of(statistic);
         } catch (IOException | ClassNotFoundException e) {
-            log.log(Level.WARNING, "deserialize error", e);
+            logger.warn("deserialize error", e);
         }
         return Optional.empty();
     }

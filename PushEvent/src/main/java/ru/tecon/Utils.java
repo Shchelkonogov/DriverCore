@@ -3,8 +3,7 @@ package ru.tecon;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.dataUploaderClient.beanInterface.DataUploaderAppBeanRemote;
 import ru.tecon.dataUploaderClient.beanInterface.instantData.InstantDataSingletonRemote;
-import ru.tecon.exception.MyServerStartException;
-import ru.tecon.server.EchoSocketServer;
+import ru.tecon.mfk1500Server.DriverProperty;
 import weblogic.jndi.WLInitialContextFactory;
 
 import javax.naming.Context;
@@ -12,21 +11,17 @@ import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.Hashtable;
 
 /**
  * Класс утилита
  */
 public class Utils {
 
-    private static Logger log = Logger.getLogger(Utils.class.getName());
-
     private static Context getContext() throws NamingException {
         Hashtable<String, String> ht = new Hashtable<>();
         ht.put(Context.INITIAL_CONTEXT_FACTORY, WLInitialContextFactory.class.getName());
-        ht.put(Context.PROVIDER_URL, "t3://" + ProjectProperty.getServerURI() + ":" + ProjectProperty.getServerPort());
+        ht.put(Context.PROVIDER_URL, "t3://" + DriverProperty.getInstance().getServerURI() + ":" + DriverProperty.getInstance().getServerPort());
 
         return new InitialContext(ht);
     }
@@ -56,42 +51,6 @@ public class Utils {
      */
     public static DataUploaderAppBeanRemote getDataUploaderAppEJB() throws NamingException {
         return (DataUploaderAppBeanRemote) getContext().lookup("ejb/DataUploaderApp#" + DataUploaderAppBeanRemote.class.getName());
-    }
-
-    /**
-     * Метод для корректного закрытия приложения в случае ошибки
-     * @param message сообщение выключения приложения
-     */
-    public static void error(String message) throws MyServerStartException {
-        error(message, null);
-    }
-
-    /**
-     * Метод для корректного закрытия приложения в случае ошибки
-     * @param message сообщение выключения приложения
-     * @param ex java exception для отображения
-     */
-    public static void error(String message, Exception ex) throws MyServerStartException {
-        if (ex == null) {
-            log.warning(message);
-            System.out.println(message);
-        } else {
-            log.log(Level.WARNING, message, ex);
-            System.out.println(message + " " + ex.getMessage());
-        }
-        if (EchoSocketServer.isCloseApplication()) {
-            try {
-                log.info("Приложение закроется через 5 секунд");
-                System.out.println("Приложение закроется через 5 секунд");
-                Thread.sleep(5000);
-                System.exit(-1);
-            } catch (InterruptedException e) {
-                log.log(Level.WARNING, "error", e);
-            }
-        } else {
-            EchoSocketServer.stopSocket();
-            throw new MyServerStartException(message);
-        }
     }
 
     public static String humanReadableByteCountBin(long bytes) {

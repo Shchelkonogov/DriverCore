@@ -1,21 +1,22 @@
 package ru.tecon.traffic;
 
-import ru.tecon.ProjectProperty;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.tecon.Utils;
 import ru.tecon.controllerData.ControllerConfig;
+import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.driverCoreClient.model.LastData;
 import ru.tecon.model.WebStatistic;
 
 import javax.naming.NamingException;
-import java.io.*;
+import java.io.IOException;
+import java.io.Serializable;
 import java.net.Socket;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import static java.time.temporal.ChronoUnit.HOURS;
@@ -28,9 +29,9 @@ public class Statistic implements Serializable {
 
     private static final long serialVersionUID = 5218038278503278808L;
 
-    private static final Logger LOGGER = Logger.getLogger(Statistic.class.getName());
-
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
+
+    private static Logger logger = LoggerFactory.getLogger(Statistic.class);
 
     private String ip;
     private String objectName;
@@ -80,13 +81,13 @@ public class Statistic implements Serializable {
      */
     private void updateObjectName(boolean update) {
         try {
-            objectName = Utils.loadRMI().loadObjectName(ProjectProperty.getServerName(), ip);
-            LOGGER.info("updated object name for ip: " + ip);
+            objectName = Utils.loadRMI().loadObjectName(DriverProperty.getInstance().getServerName(), ip);
+            logger.info("Update object name for ip {}", ip);
             if (update) {
                 update();
             }
         } catch (NamingException e) {
-            LOGGER.log(Level.WARNING, "RMI load error", e);
+            logger.warn("RMI load error", e);
         }
     }
 
@@ -137,7 +138,7 @@ public class Statistic implements Serializable {
             try {
                 socket.close();
             } catch (IOException e) {
-                LOGGER.log(Level.WARNING, "close socket error", e);
+                logger.warn("Close socket error", e);
             }
         }
     }
@@ -206,7 +207,7 @@ public class Statistic implements Serializable {
     public String getTraffic() {
         return Utils.humanReadableByteCountBin(inputTraffic.get() + outputTraffic.get()) + " (" +
                 Utils.humanReadableByteCountBin(inputTrafficReal.get() + outputTrafficReal.get()) + ") из " +
-                (ignoreTraffic ? "no limit" : Utils.humanReadableByteCountBin(ProjectProperty.getTrafficLimit()));
+                (ignoreTraffic ? "no limit" : Utils.humanReadableByteCountBin(DriverProperty.getInstance().getTrafficLimit()));
     }
 
     /**
@@ -215,7 +216,7 @@ public class Statistic implements Serializable {
     public String getMonthTraffic() {
         return Utils.humanReadableByteCountBin(monthTraffic.get()) + " (" +
                 Utils.humanReadableByteCountBin(monthTrafficReal.get()) + ") из " +
-                (ignoreTraffic ? "no limit" : Utils.humanReadableByteCountBin(ProjectProperty.getTrafficLimit() * LocalDate.now().lengthOfMonth()));
+                (ignoreTraffic ? "no limit" : Utils.humanReadableByteCountBin(DriverProperty.getInstance().getTrafficLimit() * LocalDate.now().lengthOfMonth()));
     }
 
     /**
@@ -226,7 +227,7 @@ public class Statistic implements Serializable {
         if (ignoreTraffic) {
             return;
         }
-        if ((inputTraffic.get() + outputTraffic.get()) > ProjectProperty.getTrafficLimit()) {
+        if ((inputTraffic.get() + outputTraffic.get()) > DriverProperty.getInstance().getTrafficLimit()) {
             block(BlockType.TRAFFIC);
         }
     }
@@ -343,13 +344,13 @@ public class Statistic implements Serializable {
             try {
                 Utils.loadRMI().uploadStatistic(getWebStatistic());
             } catch (NamingException e) {
-                LOGGER.log(Level.WARNING, "RMI load error", e);
+                logger.warn("RMI load error", e);
             }
         }
     }
 
     public WebStatistic getWebStatistic() {
-        WebStatistic statistic = new WebStatistic(ProjectProperty.getServerName(), getIp(), getObjectName(),
+        WebStatistic statistic = new WebStatistic(DriverProperty.getInstance().getServerName(), getIp(), getObjectName(),
                 String.valueOf(getSocketCount()), getBlockToString(), getLastRequestTime(),
                 getInputTraffic(), getOutputTraffic(), getTraffic(), getMonthTraffic());
         statistic.setClosed(!isSocketOpen());
@@ -402,7 +403,7 @@ public class Statistic implements Serializable {
     public List<LastData> getLastDayDataGroups() {
         List<LastData> lastDayDataGroups = new ArrayList<>();
 
-        LOGGER.info("last day group data is: " + lastDayData);
+        logger.info("Last day group data is {}", lastDayData);
 
         if (Objects.nonNull(lastDayData)) {
             lastDayData.forEach((key, value) -> {
