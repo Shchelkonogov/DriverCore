@@ -29,7 +29,8 @@
     </h:form>
 
     <h:form id="tableForm" style="height: calc(100% - 5px); margin: 5px;">
-        <p:dataTable id="table" emptyMessage="Данных нет" var="rowData" value="#{statisticBean.tableData}"
+        <p:dataTable id="table" emptyMessage="Данных нет" var="rowData"
+                     binding="#{statisticBean.table}" value="#{statisticBean.tableData}"
                      scrollRows="100" virtualScroll="true" lazy="true"
                      scrollable="true" scrollHeight="100%" sortBy="#{rowData.objectName}" sortOrder="ascending"
                      selectionMode="single" selection="#{statisticBean.selectedRow}"

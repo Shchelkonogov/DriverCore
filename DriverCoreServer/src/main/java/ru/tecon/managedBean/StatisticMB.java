@@ -2,11 +2,16 @@ package ru.tecon.managedBean;
 
 import org.apache.poi.ss.usermodel.Workbook;
 import org.primefaces.PrimeFaces;
+import org.primefaces.component.datatable.DataTable;
 import org.primefaces.event.SelectEvent;
+import org.primefaces.model.FilterMeta;
 import org.primefaces.model.LazyDataModel;
 import ru.tecon.driverCoreClient.model.LastData;
 import ru.tecon.ejb.WebConsoleBean;
-import ru.tecon.model.*;
+import ru.tecon.model.Command;
+import ru.tecon.model.LazyCustomDataModel;
+import ru.tecon.model.ObjectInfoModel;
+import ru.tecon.model.WebStatistic;
 import ru.tecon.report.WebStatisticReport;
 
 import javax.annotation.PostConstruct;
@@ -26,6 +31,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.logging.Logger;
 
@@ -42,6 +48,7 @@ public class StatisticMB implements Serializable {
 
     private boolean admin = false;
 
+    private DataTable table;
     private LazyCustomDataModel<WebStatistic> tableData = new LazyCustomDataModel<>();
     private WebStatistic selectedRow;
 
@@ -347,23 +354,40 @@ public class StatisticMB implements Serializable {
                 boolean filter = false;
                 int index = tableData.getFilteredData().indexOf(tableDatum);
 
+                String sortField = table.getSortField() == null ? "objectName" : table.getSortField();
+                Map<String, String> filterData = table.getFilterBy()
+                        .values()
+                        .stream()
+                        .filter(filterMeta -> Objects.nonNull(filterMeta.getFilterValue()))
+                        .collect(Collectors.toMap(FilterMeta::getFilterField, v -> v.getFilterValue().toString()));
+
                 if (!tableDatum.getObjectName().equals(st.getObjectName())) {
                     tableDatum.setObjectName(st.getObjectName());
-                    update.add("tableForm:table:" + index + ":objectNameValue");
-                    filter = true;
+                    if (sortField.equals("objectName") ||
+                            (filterData.keySet().contains("objectName") && st.getObjectName().contains(filterData.get("objectName")))) {
+                        filter = true;
+                    } else {
+                        update.add("tableForm:table:" + index + ":objectNameValue");
+                    }
                 }
 
                 if (!tableDatum.getSocketCount().equals(st.getSocketCount()) || (tableDatum.isClosed() != st.isClosed())) {
                     tableDatum.setSocketCount(st.getSocketCount());
                     tableDatum.setClosed(st.isClosed());
-                    update.add("tableForm:table:" + index + ":socketCountValue");
-                    filter = true;
+                    if (sortField.equals("socketCount") && (index != -1)) {
+                        filter = true;
+                    } else {
+                        update.add("tableForm:table:" + index + ":socketCountValue");
+                    }
                 }
 
                 if (!tableDatum.getStatus().equals(st.getStatus())) {
                     tableDatum.setStatus(st.getStatus());
-                    update.add("tableForm:table:" + index + ":statusValue");
-                    filter = true;
+                    if (sortField.equals("status") && (index != -1)) {
+                        filter = true;
+                    } else {
+                        update.add("tableForm:table:" + index + ":statusValue");
+                    }
                 }
 
                 if (!tableDatum.getLastRequestTime().equals(st.getLastRequestTime())) {
@@ -392,7 +416,7 @@ public class StatisticMB implements Serializable {
                 }
 
                 if (filter) {
-                    PrimeFaces.current().executeScript("PF('tableWidget').filter(); updateFooter();");
+                    PrimeFaces.current().executeScript("PF('tableWidget').filter();");
                 } else {
                     if (index != -1) {
                         PrimeFaces.current().ajax().update(update);
@@ -433,6 +457,14 @@ public class StatisticMB implements Serializable {
 
     public String getServerName() {
         return serverName;
+    }
+
+    public DataTable getTable() {
+        return table;
+    }
+
+    public void setTable(DataTable table) {
+        this.table = table;
     }
 
     public LazyDataModel<WebStatistic> getTableData() {
