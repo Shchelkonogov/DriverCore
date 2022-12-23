@@ -25,6 +25,13 @@ public class DataModel implements Comparable<DataModel>, Serializable {
     private List<ValueModel> data = new ArrayList<>();
     private String incrementValue;
 
+    public DataModel(DataModel dataModel) {
+        this(dataModel.getParamName(), dataModel.getObjectId(),
+                dataModel.getParamId(), dataModel.getAggregateId(),
+                dataModel.getStartTime(), dataModel.getIncrementValue());
+        data = new ArrayList<>();
+    }
+
     public DataModel(String paramName, int objectId, int paramId, int aggregateId,
                      LocalDateTime startTime, String incrementValue) {
         this.paramName = paramName;
@@ -62,8 +69,16 @@ public class DataModel implements Comparable<DataModel>, Serializable {
         return startTime;
     }
 
+    public void setStartTime(LocalDateTime startTime) {
+        this.startTime = startTime;
+    }
+
     public List<ValueModel> getData() {
         return data;
+    }
+
+    private String getIncrementValue() {
+        return incrementValue;
     }
 
     @Override

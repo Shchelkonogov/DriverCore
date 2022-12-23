@@ -6,14 +6,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.tecon.Utils;
 import ru.tecon.controllerData.ControllerConfig;
-import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.instantData.InstantDataService;
+import ru.tecon.mfk1500Server.DriverProperty;
+import ru.tecon.mfk1500Server.MFK1500Server;
+import ru.tecon.mfk1500Server.message.MessageService;
 import ru.tecon.model.Command;
-import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.Statistic;
 
 import javax.naming.NamingException;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -37,10 +39,10 @@ public class CommandHandler extends SimpleChannelInboundHandler<Command> {
                     InstantDataService.uploadInstantData(command.getParameter("url"), command.getParameter("rowID"));
                     break;
                 case "block":
-                    EchoSocketServer.getStatistic().get(command.getParameter("url")).block(BlockType.USER);
+                    MFK1500Server.getStatistic().get(command.getParameter("url")).block(BlockType.USER);
                     break;
                 case "unblock":
-                    EchoSocketServer.getStatistic().get(command.getParameter("url")).unblockAll();
+                    MFK1500Server.getStatistic().get(command.getParameter("url")).unblockAll();
                     break;
                 case "info":
                     try {
@@ -54,21 +56,21 @@ public class CommandHandler extends SimpleChannelInboundHandler<Command> {
                     ControllerConfig.setControllerInfo(command.getParameter("url"),command.getParameter("info"));
                     break;
                 case "blockTraffic":
-                    EchoSocketServer.getStatistic().get(command.getParameter("url")).setIgnoreTraffic(false);
+                    MFK1500Server.getStatistic().get(command.getParameter("url")).setIgnoreTraffic(false);
                     break;
                 case "unblockTraffic":
-                    EchoSocketServer.getStatistic().get(command.getParameter("url")).setIgnoreTraffic(true);
+                    MFK1500Server.getStatistic().get(command.getParameter("url")).setIgnoreTraffic(true);
                     break;
                 case "synchronizeDate":
                     ControllerConfig.synchronizeDate(command.getParameter("url"));
                     break;
                 case "remove":
-                    EchoSocketServer.removeStatistic(command.getParameter("url"));
+                    MFK1500Server.removeStatistic(command.getParameter("url"));
                     break;
                 case "getLastConfigNames":
                     try {
                         Utils.loadRMI().uploadLogData(command.getParameter("sessionID"),
-                                EchoSocketServer.getStatistic().get(command.getParameter("url")).getLastDayDataGroups());
+                                MFK1500Server.getStatistic().get(command.getParameter("url")).getLastDayDataGroups());
                     } catch (NamingException | NullPointerException e) {
                         logger.warn("Error send last config names to client", e);
                     }
@@ -87,19 +89,30 @@ public class CommandHandler extends SimpleChannelInboundHandler<Command> {
                         logger.warn("Error upload config names", e);
                     }
                     break;
+                case "clearMark":
+                    MFK1500Server.getStatistic().get(command.getParameter("url")).clearMarkV2();
+                    break;
+                case "clearModel":
+                    MFK1500Server.getStatistic().get(command.getParameter("url")).clearObjectModel();
+                    break;
             }
         } else {
-            if (command.getName().equalsIgnoreCase("requestStatistic")) {
-                try {
-                    Utils.loadRMI().uploadStatistic(command.getParameter("sessionID"),
-                            EchoSocketServer.getStatistic().values()
-                                    .stream()
-                                    .map(Statistic::getWebStatistic)
-                                    .collect(Collectors.toList())
-                    );
-                } catch (NamingException e) {
-                    logger.warn("Error load RMI", e);
-                }
+            switch (command.getName()) {
+                case "requestStatistic":
+                    try {
+                        Utils.loadRMI().uploadStatistic(command.getParameter("sessionID"),
+                                MFK1500Server.getStatistic().values()
+                                        .stream()
+                                        .map(Statistic::getWebStatistic)
+                                        .collect(Collectors.toList())
+                        );
+                    } catch (NamingException e) {
+                        logger.warn("Error load RMI", e);
+                    }
+                    break;
+                case "reSubDriver":
+                    MFK1500Server.WORKER_SERVICE.schedule(MessageService::subscriptService, 5, TimeUnit.MINUTES);
+                    break;
             }
         }
         ctx.close();

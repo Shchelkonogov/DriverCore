@@ -1,15 +1,20 @@
 package ru.tecon.mfk1500Server.message;
 
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import ru.tecon.exception.MyServerStartException;
 import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.mfk1500Server.MFK1500Server;
-import ru.tecon.exception.MyServerStartException;
 
-import javax.ws.rs.client.ClientBuilder;
-import javax.ws.rs.core.Response;
-import java.util.Objects;
-import java.util.concurrent.*;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * @author Maksim Shchelkonogov
@@ -18,36 +23,33 @@ public class MessageService {
 
     private static Logger logger = LoggerFactory.getLogger(MessageService.class);
 
-    private static MFK1500Server server;
-    private static ScheduledExecutorService service;
-    private static ScheduledFuture future;
-
     public static void startService() {
-        server = new MFK1500Server();
-        ExecutorService messageService = Executors.newSingleThreadExecutor();
-        messageService.submit(() -> server.run());
-
         subscriptService();
 
-        service = Executors.newSingleThreadScheduledExecutor();
-        future = service.scheduleAtFixedRate(() -> {
-            try {
+        MFK1500Server.WORKER_SERVICE.scheduleAtFixedRate(() -> {
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
                 DriverProperty property = DriverProperty.getInstance();
 
-                Response response = ClientBuilder.newClient()
-                        .target("http://" + property.getServerURI() + ":" + property.getServerPort() + "/DriverCore/api/checkDriver")
-                        .queryParam("name", property.getServerName())
-                        .request()
-                        .get();
+                URI build = new URIBuilder()
+                        .setScheme("http")
+                        .setHost(property.getServerURI())
+                        .setPort(Integer.parseInt(property.getServerPort()))
+                        .setPathSegments("DriverCore", "api", "checkDriver")
+                        .addParameter("name", property.getServerName())
+                        .build();
 
-                switch (response.getStatus()) {
+                HttpGet httpGet = new HttpGet(build);
+
+                Integer status = httpClient.execute(httpGet, response -> response.getStatusLine().getStatusCode());
+
+                switch (status) {
                     case 200:
                         break;
                     case 204:
                         subscriptService();
                         break;
                     default:
-                        logger.warn("Message service checker subscription unknown response {}", response.getStatus());
+                        logger.warn("Message service checker subscription unknown response {}", status);
                 }
             } catch (MyServerStartException ignore) {
             } catch (Exception ex) {
@@ -57,40 +59,50 @@ public class MessageService {
     }
 
     public static void stopService() {
-        try {
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
             DriverProperty property = DriverProperty.getInstance();
 
-            ClientBuilder.newClient()
-                    .target("http://" + property.getServerURI() + ":" + property.getServerPort() + "/DriverCore/api/removeDriver")
-                    .queryParam("name", property.getServerName())
-                    .request()
-                    .post(null);
+            URI build = new URIBuilder()
+                    .setScheme("http")
+                    .setHost(property.getServerURI())
+                    .setPort(Integer.parseInt(property.getServerPort()))
+                    .setPathSegments("DriverCore", "api", "removeDriver")
+                    .addParameter("name", property.getServerName())
+                    .build();
 
-            server.stop();
+            HttpPost httpPost = new HttpPost(build);
+
+            Integer status = httpClient.execute(httpPost, response -> response.getStatusLine().getStatusCode());
+
+            logger.info("remove driver status {}", status);
         } catch (Exception ex) {
             logger.warn("Message service stop error", ex);
             throw new MyServerStartException("Message service stop error", ex);
         }
-
-        if (Objects.nonNull(service)) {
-            future.cancel(true);
-            service.shutdown();
-        }
     }
 
-    private static void subscriptService() {
+    public static void subscriptService() {
         DriverProperty property = DriverProperty.getInstance();
 
-        Response response = ClientBuilder.newClient()
-                .target("http://" + property.getServerURI() + ":" + property.getServerPort() + "/DriverCore/api/addDriver")
-                .queryParam("name", property.getServerName())
-                .queryParam("port", property.getMessageServicePort())
-                .request()
-                .post(null);
+        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            URI build = new URIBuilder()
+                    .setScheme("http")
+                    .setHost(property.getServerURI())
+                    .setPort(Integer.parseInt(property.getServerPort()))
+                    .setPathSegments("DriverCore", "api", "addDriver")
+                    .addParameter("name", property.getServerName())
+                    .addParameter("port", String.valueOf(property.getMessageServicePort()))
+                    .build();
 
-        if (response.getStatus() != 201) {
-            logger.warn("Error subscript service. response status {}", response.getStatus());
-            throw new MyServerStartException("Error subscript service");
+            HttpPost httpPost = new HttpPost(build);
+
+            Integer status = httpClient.execute(httpPost, response -> response.getStatusLine().getStatusCode());
+            if (status != 201) {
+                logger.warn("Error subscript service. response status {}", status);
+                throw new MyServerStartException("Error subscript service");
+            }
+        } catch (IOException | URISyntaxException e) {
+            throw new MyServerStartException("Error subscript service", e);
         }
     }
 }

@@ -4,10 +4,10 @@ import com.jcraft.jsch.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.tecon.Utils;
-import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.isacom.*;
+import ru.tecon.mfk1500Server.DriverProperty;
+import ru.tecon.mfk1500Server.MFK1500Server;
 import ru.tecon.model.ObjectInfoModel;
-import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.ControllerSocket;
 import ru.tecon.traffic.MonitorInputStream;
@@ -161,7 +161,7 @@ public final class ControllerConfig {
 
         Set<String> result = new HashSet<>();
 
-        if (EchoSocketServer.isBlocked(url, BlockType.TRAFFIC)) {
+        if (MFK1500Server.isBlocked(url, BlockType.TRAFFIC)) {
             logger.warn("Traffic block for {}", url);
             return result;
         }
@@ -178,7 +178,7 @@ public final class ControllerConfig {
 
             StringBuilder sb = new StringBuilder();
 
-            Statistic st = EchoSocketServer.getStatistic(url);
+            Statistic st = MFK1500Server.getStatistic(url);
             st.updateOutputTraffic(100);
 
             try (MonitorInputStream monitor = new MonitorInputStream(channel.getInputStream())) {
@@ -382,7 +382,7 @@ public final class ControllerConfig {
                 }
             }
         } catch (IOException | IsacomException | JSchException e) {
-            logger.warn("Error isacom or ssh", e);
+            logger.warn("Error isacom or ssh {}", url, e);
         }
 
         return result;
@@ -458,7 +458,7 @@ public final class ControllerConfig {
 
         Channel channel = session.openChannel("shell");
 
-        Statistic st = EchoSocketServer.getStatistic(host);
+        Statistic st = MFK1500Server.getStatistic(host);
         st.updateOutputTraffic(100);
 
         try (MonitorInputStream monitor = new MonitorInputStream(channel.getInputStream())) {

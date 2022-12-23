@@ -4,6 +4,8 @@ import oracle.jdbc.OracleConnection;
 import ru.tecon.beanInterface.LoadOPCLocal;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.driverCoreClient.model.LastData;
+import ru.tecon.ejb.TestPGAppBean;
+import ru.tecon.ejb.TestPGBean;
 import ru.tecon.ejb.WebConsoleBean;
 import ru.tecon.model.*;
 import ru.tecon.webSocket.WebSocketServer;
@@ -178,7 +180,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
             "from tsa_linked_element b, tsa_opc_element c " +
             "where b.opc_element_id in (select id from tsa_opc_element " +
                                         "where opc_object_id = (select id from tsa_opc_object " +
-                                                                "where display_name like ?)) " +
+                                                                "where display_name like ? escape '!')) " +
             "and b.opc_element_id = c.id " +
             "and exists(select a.obj_id, a.par_id from dz_par_dev_link a " +
                         "where a.par_id = b.aspid_param_id and a.obj_id = b.aspid_object_id) " +
@@ -253,6 +255,12 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     @EJB
     private WebConsoleBean webConsoleBean;
 
+    @EJB
+    private TestPGAppBean pgAppBean;
+
+    @EJB
+    private TestPGBean pgBean;
+
     @Override
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public void insertOPCObjects(List<String> objects, String serverName) {
@@ -301,6 +309,8 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
                 return false;
             }
         } catch (SQLException e) {
+            // TODO Если ошибка обращения к базе, то нужно как-то по другому делать иначе все объекты падают
+            //  в не слинковано или изменился прибор
             LOG.log(Level.WARNING, "Ошибка обращения к базе; server name: " + serverName + "; object name: " + objectName, e);
         }
         return false;
@@ -491,9 +501,67 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
     }
 
     @Override
+    public List<DataModel> loadObjectModel(String objectName, String serverName) {
+        List<DataModel> paramList = new ArrayList<>();
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stmGetObject = connect.prepareStatement(SQL_GET_OBJECT);
+             PreparedStatement stmGetLinkedParameters = connect.prepareStatement(SQL_GET_LINKED_PARAMETERS)) {
+            stmGetObject.setString(1, loadObjectPath(objectName, serverName));
+
+            ResultSet resGetObject = stmGetObject.executeQuery();
+            String objectId;
+            if (resGetObject.next()) {
+                objectId = resGetObject.getString(1);
+            } else {
+                return paramList;
+            }
+
+            stmGetLinkedParameters.setString(1, objectId);
+
+            ResultSet resLinked = stmGetLinkedParameters.executeQuery();
+            while (resLinked.next()) {
+                paramList.add(new DataModel(resLinked.getString(1), resLinked.getInt(2), resLinked.getInt(3),
+                        resLinked.getInt(4), null,
+                        (resLinked.getString(5) == null) ? null : resLinked.getString(5).substring(2)));
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.WARNING, "Error when load parameters list", e);
+        }
+
+        LOG.info("object: " + objectName + ":" + serverName + " parameters count: " + paramList.size());
+
+        return paramList;
+    }
+
+    @Override
+    public List<DataModel> loadObjectModelStartTimes(List<DataModel> objectModel) {
+        try (Connection connect = ds.getConnection();
+             PreparedStatement stmGetStartDate = connect.prepareStatement(SQL_GET_START_DATE)) {
+            for (DataModel model: objectModel) {
+                stmGetStartDate.setInt(1, model.getObjectId());
+                stmGetStartDate.setInt(2, model.getParamId());
+                stmGetStartDate.setInt(3, model.getAggregateId());
+
+                ResultSet resStartDate = stmGetStartDate.executeQuery();
+                while (resStartDate.next()) {
+                    model.setStartTime(LocalDateTime.parse(resStartDate.getString(1), FORMAT));
+                }
+            }
+        } catch (SQLException e) {
+            LOG.log(Level.WARNING, "Error when load parameters list", e);
+        }
+        return objectModel;
+    }
+
+    @Override
     @Asynchronous
     @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
     public Future<Void> putData(List<DataModel> paramList) {
+
+        if (pgAppBean.isUsePg()) {
+            pgBean.putDataToPG(paramList);
+        }
+
         try (OracleConnection connect = dsUpload.getConnection().unwrap(oracle.jdbc.OracleConnection.class);
              PreparedStatement stmAlter = connect.prepareStatement("alter session set nls_numeric_characters = '.,'");
              CallableStatement stm = connect.prepareCall(SQL_INSERT_DATA)) {
@@ -532,6 +600,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
 
     @Override
     public void putDataWithCalculateIntegrator(List<DataModel> paramList) {
+        // TODO Попытаться убрать выбросы.
         if (paramList != null) {
             paramList.forEach(dataModel -> {
                 String[] splitStr =  dataModel.getParamName().split("::");
@@ -714,7 +783,7 @@ public class LoadOPC implements LoadOPCLocal, LoadOPCRemote {
         ArrayList<DataModel> result = new ArrayList<>();
         try (Connection connect = ds.getConnection();
              PreparedStatement stm = connect.prepareStatement(SQL_GET_LINKED_PARAMETERS_FOR_INSTANT_DATA)) {
-            stm.setString(1, serverName + '_' + url + '%');
+            stm.setString(1, serverName + '_' + url + "!_%");
             ResultSet res = stm.executeQuery();
             while (res.next()) {
                 result.add(new DataModel(res.getString(1), res.getInt(2), res.getInt(3), res.getInt(4),

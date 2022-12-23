@@ -70,6 +70,10 @@ public interface LoadOPCRemote {
      */
     ArrayList<DataModel> loadObjectParameters(String objectName, String serverName);
 
+    List<DataModel> loadObjectModel(String objectName, String serverName);
+
+    List<DataModel> loadObjectModelStartTimes(List<DataModel> objectModel);
+
     /**
      * Асинхронный метод для загрузки значений по парамтерам в базу
      * @param paramList список параметров со значениями

@@ -25,9 +25,7 @@ jQuery(window).resize(function() {
 var interval;
 
 function connect() {
-    var ws = new WebSocket('ws://172.16.4.26:7003/DriverCore/ws/client');
-    // var ws = new WebSocket('ws://localhost:7001/DriverCore/ws/client');
-    // var ws = new WebSocket('ws://10.230.1.102:7001/DriverCore/ws/client');
+    var ws = new WebSocket('ws:' + window.location.host + '/DriverCore/ws/client');
 
     ws.onmessage = function(e) {
         var split = e.data.toString().split(':');

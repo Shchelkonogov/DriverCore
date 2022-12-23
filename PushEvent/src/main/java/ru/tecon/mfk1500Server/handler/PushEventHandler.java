@@ -1,27 +1,24 @@
-package ru.tecon.server;
+package ru.tecon.mfk1500Server.handler;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.tecon.Utils;
 import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.controllerData.ControllerConfig;
-import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.exception.MySocketException;
+import ru.tecon.exception.MyStatisticException;
+import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.model.DataModel;
 import ru.tecon.model.ValueModel;
 import ru.tecon.server.model.ParseDataModel;
 import ru.tecon.traffic.BlockType;
-import ru.tecon.traffic.MonitorInputStream;
-import ru.tecon.traffic.MonitorOutputStream;
 import ru.tecon.traffic.Statistic;
 
-import javax.ejb.EJBException;
 import javax.naming.NamingException;
-import java.io.BufferedInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,245 +31,217 @@ import java.util.stream.Collectors;
 import static java.nio.file.StandardOpenOption.APPEND;
 import static java.nio.file.StandardOpenOption.CREATE;
 
-public class EchoThread extends Thread {
+/**
+ * @author Maksim Shchelkonogov
+ */
+public class PushEventHandler extends ChannelInboundHandlerAdapter {
 
-    private static Logger logger = LoggerFactory.getLogger(EchoThread.class);
+    private Logger logger = LoggerFactory.getLogger(PushEventHandler.class);
 
-    private Socket socket;
+    private String objectName = "";
     private String serverName;
-    private String objectName = null;
+    private byte protocolVersion;
     private LoadOPCRemote opc;
 
     private Statistic statistic;
 
-    private byte[] markV2 = new byte[0];
-    private int protocolVersion = 2;
-
-    EchoThread(Socket clientSocket, String serverName) {
-        this.socket = clientSocket;
-        this.serverName = serverName;
+    public PushEventHandler(Statistic statistic) {
+        this.statistic = statistic;
+        this.serverName = DriverProperty.getInstance().getServerName();
     }
 
-    public void run() {
-        DataInputStream in;
-        MonitorOutputStream out;
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) {
+        statistic.setChannel(ctx.channel());
+    }
 
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
         try {
-            statistic = EchoSocketServer.getStatistic(socket.getInetAddress().getHostAddress());
-            statistic.setSocket(socket);
+            ByteBuf in = (ByteBuf) msg;
+            int length = in.readUnsignedShort();
+            logger.info("Message size {} {}", length, getObjectData());
 
-            MonitorInputStream monitorIn = new MonitorInputStream(socket.getInputStream());
-            monitorIn.setStatistic(statistic);
-            in = new DataInputStream(new BufferedInputStream(monitorIn));
-
-            out = new MonitorOutputStream(socket.getOutputStream());
-            out.setStatistic(statistic);
-        } catch (IOException e) {
-            logger.warn("Error create data streams", e);
-            return;
-        }
-
-        while (true) {
-            try {
-                // Читаем первые 2 байта в которых указан размер сообщения
-                byte[] data = new byte[2];
-                if (in.read(data, 0, 2) != -1) {
-                    logger.info("Message size {} objectName: {}", Arrays.toString(data), objectName);
-                    int size = (((data[0] & 0xff) << 8) | (data[1] & 0xff));
-
-                    // Читаем сообщение
-                    data = new byte[size];
-
-                    if (size == 0) {
-                        statistic.block(BlockType.SERVER_ERROR);
-
-                        socket.close();
-                        logger.warn("Error read message Socket close! objectName: {}", objectName);
-                        return;
-                    }
-                    in.readFully(data);
-                    logger.info("Message body {} objectName: {}", Arrays.toString(data), objectName);
-
-                    int packageType = data[0] & 0xff;
-
-                    logger.info("Data size: {} packageType: {} objectName: {}", size, packageType, objectName);
-
-                    switch (packageType) {
-                        case 1: {
-                            identify(data, out);
-                            break;
-                        }
-                        case 3: {
-                            if (!opc.checkObject(serverName + '_' + objectName, serverName)) {
-                                logger.info("Object is not linked, block client objectName: {}", objectName);
-                                statistic.block(BlockType.LINKED);
-                                socket.close();
-                                return;
-                            }
-
-                            ArrayList<DataModel> dataModels = opc.loadObjectParameters(serverName + '_' + objectName, serverName);
-                            Collections.sort(dataModels);
-
-                            logger.info("Loaded parameters from db objectName: {}", objectName);
-
-                            List<ParseDataModel> result = new ArrayList<>();
-                            int messagesCount;
-                            int messageConfirmSize;
-
-                            switch (protocolVersion) {
-                                case 1:
-                                    try {
-                                        messageConfirmSize = 2;
-                                        messagesCount = parse(data, result, 2, protocolVersion);
-                                    } catch (Exception e) {
-                                        statistic.block(BlockType.SERVER_ERROR);
-
-                                        socket.close();
-                                        logger.warn("Parse version 1 exception. Socket close! Data: {} objectName: {}",
-                                                Arrays.toString(data), objectName, e);
-                                        return;
-                                    }
-                                    break;
-                                case 2:
-                                    try {
-                                        messageConfirmSize = 3;
-
-                                        int markSize = ByteBuffer.wrap(data, 3, 1).get();
-                                        markV2 = new byte[markSize];
-                                        System.arraycopy(data, 4, markV2, 0, markSize);
-
-                                        messagesCount = parse(data, result, 4 + markSize, protocolVersion);
-                                    } catch (Exception e) {
-                                        statistic.block(BlockType.SERVER_ERROR);
-
-                                        socket.close();
-                                        logger.warn("Parse version 2 exception. Socket close! Data: {} objectName: {}",
-                                                Arrays.toString(data), objectName, e);
-                                        return;
-                                    }
-                                    break;
-                                default:
-                                    statistic.block(BlockType.SERVER_ERROR);
-
-                                    socket.close();
-                                    logger.warn("Unknown protocolVersion. Socket close! Data: {} objectName: {}",
-                                            Arrays.toString(data), objectName);
-                                    return;
-                            }
-
-                            logger.info("Message parsed. objectName: {}", objectName);
-
-                            Collections.sort(result);
-
-                            dataModels.forEach(dataModel -> {
-                                for (ParseDataModel model: result) {
-                                    if (Objects.nonNull(model.getValue(dataModel.getParamName())) &&
-                                            ((dataModel.getStartTime() == null) ||
-                                                    model.getDate().isAfter(dataModel.getStartTime()))) {
-                                        dataModel.addData(new ValueModel(String.valueOf(model.getValue(dataModel.getParamName())),
-                                                model.getDate()));
-                                    }
-                                }
-                            });
-
-                            dataModels.removeIf(dataModel -> dataModel.getData().isEmpty());
-
-                            logger.info("Put data to DB size: {} objectName: {}", dataModels.size(), objectName);
-
-                            opc.putDataWithCalculateIntegrator(dataModels);
-
-                            byte[] response = new byte[messageConfirmSize + 2];
-                            response[0] = 0;
-                            response[1] = (byte) messageConfirmSize;
-                            response[2] = (byte) 4;
-
-                            byte[] messageCountArray = ByteBuffer.allocate(4).putInt(messagesCount).array();
-
-                            switch (messageConfirmSize) {
-                                case 3:
-                                    response[3] = messageCountArray[2];
-                                    response[4] = messageCountArray[3];
-                                    break;
-                                case 2:
-                                default:
-                                    response[3] = messageCountArray[3];
-                            }
-
-                            logger.info("Send load message ok: {} objectName: {}", Arrays.toString(response), objectName);
-
-                            out.write(response);
-                            out.flush();
-                            break;
-                        }
-                        case 10: {
-                            byte[] response = new byte[4 + markV2.length];
-                            byte[] responseSize = ByteBuffer.allocate(4).putInt(2 + markV2.length).array();
-
-                            response[0] = responseSize[2];
-                            response[1] = responseSize[3];
-                            response[2] = 11 & 0xff;
-                            response[3] = (byte) (markV2.length & 0xff);
-                            System.arraycopy(markV2, 0, response, 4, markV2.length);
-
-                            logger.info("Send mark message: {} objectName: {}", Arrays.toString(response), objectName);
-
-                            out.write(response);
-                            out.flush();
-                            break;
-                        }
-                        default: {
-                            statistic.block(BlockType.SERVER_ERROR);
-
-                            socket.close();
-                            logger.warn("Unknown packageType. data: {} objectName: {}", Arrays.toString(data), objectName);
-                            return;
-                        }
-                    }
-                } else {
-                    statistic.block(BlockType.LINK_ERROR);
-
-                    socket.close();
-                    logger.warn("Can't read head of message. Socket close! objectName: {}", objectName);
-                    return;
-                }
-            } catch (EJBException e) {
-                logger.warn("EJBException when read messages. objectName: {}", objectName, e);
-                try {
-                    socket.close();
-                } catch (IOException ex) {
-                    logger.warn("Error close socket. objectName: {}", objectName, ex);
-                    return;
-                }
+            if (length == 0) {
+                logger.warn("Error read message {}", getObjectData());
                 statistic.block(BlockType.SERVER_ERROR);
-
-                return;
-            } catch (MySocketException e) {
-                logger.warn("My error. objectName: {}", objectName, e);
-                return;
-            } catch (IOException e) {
-                logger.warn("Error when read message. objectName: {}", objectName, e);
-
-                // Иногда возникает ошибка Read timed out и в этом случае похоже socket не закрывается
-                if (!socket.isClosed()) {
-                    try {
-                        socket.close();
-                    } catch (IOException ex) {
-                        logger.warn("Error close socket. objectName: {}", objectName, ex);
-                        return;
-                    }
-                }
-                return;
+                ctx.close();
             }
+
+            byte[] data = new byte[length];
+            in.readBytes(data);
+            logger.info("Message body {} {}", Arrays.toString(data), getObjectData());
+
+            int packageType = data[0] & 0xff;
+
+            logger.info("Data size: {} packageType: {} {}", length, packageType, getObjectData());
+            outer: switch (packageType) {
+                case 1: {
+                    identify(data, ctx);
+                    break;
+                }
+                case 3: {
+                    if (!opc.checkObject(serverName + '_' + objectName, serverName)) {
+                        logger.info("Object is not linked, block client {}", getObjectData());
+                        statistic.block(BlockType.LINKED);
+                        ctx.close();
+                        break;
+                    }
+
+                    List<DataModel> dataModels = statistic.getObjectModel();
+
+                    logger.info("Loaded parameters from db {}", getObjectData());
+
+                    List<ParseDataModel> result = new ArrayList<>();
+                    int messagesCount;
+                    int messageConfirmSize;
+
+                    switch (protocolVersion) {
+                        case 1:
+                            try {
+                                messageConfirmSize = 2;
+                                messagesCount = parse(data, result, 2, protocolVersion);
+                            } catch (Exception e) {
+                                logger.warn("Parse version 1 exception. Data: {} {}",
+                                        Arrays.toString(data), getObjectData(), e);
+                                statistic.block(BlockType.SERVER_ERROR);
+                                ctx.close();
+                                break outer;
+                            }
+                            break;
+                        case 2:
+                            try {
+                                messageConfirmSize = 3;
+
+                                int markSize = ByteBuffer.wrap(data, 3, 1).get();
+                                byte[] markV2 = new byte[markSize];
+                                System.arraycopy(data, 4, markV2, 0, markSize);
+                                statistic.setMarkV2(markV2);
+                                logger.info("Update mark {} {}", Arrays.toString(markV2), getObjectData());
+
+                                messagesCount = parse(data, result, 4 + markSize, protocolVersion);
+                            } catch (Exception e) {
+                                logger.warn("Parse version 2 exception. Data: {} {}",
+                                        Arrays.toString(data), getObjectData(), e);
+                                statistic.block(BlockType.SERVER_ERROR);
+                                ctx.close();
+                                break outer;
+                            }
+                            break;
+                        default:
+                            logger.warn("Unknown protocolVersion. Data: {} {}",
+                                    Arrays.toString(data), getObjectData());
+                            statistic.block(BlockType.SERVER_ERROR);
+                            ctx.close();
+                            break outer;
+                    }
+
+                    logger.info("Message parsed. {}", getObjectData());
+
+                    Collections.sort(result);
+
+                    dataModels.forEach(dataModel -> {
+                        for (ParseDataModel model : result) {
+                            if (Objects.nonNull(model.getValue(dataModel.getParamName())) &&
+                                    ((dataModel.getStartTime() == null) ||
+                                            model.getDate().isAfter(dataModel.getStartTime()))) {
+                                dataModel.addData(new ValueModel(String.valueOf(model.getValue(dataModel.getParamName())),
+                                        model.getDate()));
+                            }
+                        }
+                    });
+
+                    dataModels.removeIf(dataModel -> dataModel.getData().isEmpty());
+
+                    if (dataModels.isEmpty()) {
+                        logger.info("No data to put into database {}", getObjectData());
+                    } else {
+                        logger.info("Put data to DB size: {} {}", dataModels.size(), getObjectData());
+
+                        opc.putDataWithCalculateIntegrator(dataModels);
+                    }
+
+                    byte[] response = new byte[messageConfirmSize + 2];
+                    response[0] = 0;
+                    response[1] = (byte) messageConfirmSize;
+                    response[2] = (byte) 4;
+
+                    byte[] messageCountArray = ByteBuffer.allocate(4).putInt(messagesCount).array();
+
+                    switch (messageConfirmSize) {
+                        case 3:
+                            response[3] = messageCountArray[2];
+                            response[4] = messageCountArray[3];
+                            break;
+                        case 2:
+                        default:
+                            response[3] = messageCountArray[3];
+                    }
+
+                    logger.info("Send load message ok: {} {}", Arrays.toString(response), getObjectData());
+
+                    ctx.writeAndFlush(response);
+
+                    if (protocolVersion == 2) {
+                        statistic.updateMarkV2();
+                    }
+                    break;
+                }
+                case 10: {
+                    byte[] markV2 = statistic.getMarkV2();
+                    logger.info("get mark {} {}", Arrays.toString(markV2), getObjectData());
+                    byte[] response = new byte[4 + markV2.length];
+                    byte[] responseSize = ByteBuffer.allocate(4).putInt(2 + markV2.length).array();
+
+                    response[0] = responseSize[2];
+                    response[1] = responseSize[3];
+                    response[2] = 11 & 0xff;
+                    response[3] = (byte) (markV2.length & 0xff);
+                    System.arraycopy(markV2, 0, response, 4, markV2.length);
+
+                    logger.info("Send mark message: {} {}", Arrays.toString(response), getObjectData());
+
+                    ctx.writeAndFlush(response);
+                    break;
+                }
+                default: {
+                    logger.warn("Unknown packageType. data: {} {}", Arrays.toString(data), getObjectData());
+                    statistic.block(BlockType.SERVER_ERROR);
+                    ctx.close();
+                }
+            }
+        } catch (MySocketException e) {
+            logger.warn("My pushEvent handler error {}", getObjectData(), e);
+        } catch (MyStatisticException e) {
+            statistic.block(BlockType.SERVER_ERROR);
+            logger.warn("My statistic handler error {}", getObjectData(), e);
+        } finally {
+            ReferenceCountUtil.release(msg);
         }
+    }
+
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        logger.warn("Error with object {}", getObjectData(), cause);
+        statistic.block(BlockType.SERVER_ERROR);
+        ctx.close();
+    }
+
+    @Override
+    public void channelUnregistered(ChannelHandlerContext ctx) {
+        logger.info("Client unregistered {}", getObjectData());
+    }
+
+    private String getObjectData() {
+        return "host: " + statistic.getIp() + (objectName.equals("") ? "" : " name: " + objectName);
     }
 
     /**
      * Метод проверяет идентификацию подключаемого клиента
      * @param data данные запроса
-     * @param out поток для ответа
-     * @throws IOException если произошла ошибка
+     * @param ctx поток для ответа
      */
-    private void identify(byte[] data, OutputStream out) throws MySocketException, IOException {
+    private void identify(byte[] data, ChannelHandlerContext ctx) throws MySocketException {
         String version = Integer.toBinaryString(data[1] & 0xff);
 
         switch (version) {
@@ -286,13 +255,11 @@ public class EchoThread extends Thread {
 
         int direction = data[2] & 0xff;
         if (!(direction == 0 || direction == 1)) {
-            logger.warn("Identify duration error. objectName: {}", objectName);
-            out.write(getIdentificationFailureMessage());
-            out.flush();
+            logger.warn("Identify duration error {}", getObjectData());
+            ctx.writeAndFlush(getIdentificationFailureMessage());
 
             statistic.block(BlockType.SERVER_ERROR);
-
-            socket.close();
+            ctx.close();
             throw new MySocketException("Duration error");
         }
 
@@ -300,41 +267,57 @@ public class EchoThread extends Thread {
 
         String model = new String(Arrays.copyOfRange(data, 4, data.length));
 
-        logger.info("Identify version: {} direction: {} controllerNumber: {} model: {} objectName: {}",
-                version, direction, controllerNumber, model, objectName);
+        logger.info("Identify version: {} direction: {} controllerNumber: {} model: {} {}",
+                version, direction, controllerNumber, model, getObjectData());
 
         try {
             opc = Utils.loadRMI();
-            objectName = socket.getInetAddress().getHostAddress() +
+            objectName = statistic.getIp() +
                     '_' +
                     controllerNumber +
                     '_' +
                     model;
+            statistic.setControllerIdent(objectName);
 
             if (opc.checkObject(serverName + '_' + objectName, serverName)) {
-                logger.info("Object is linked. objectName: {}", objectName);
-                out.write(getConfirmIdentifyMessage());
-                out.flush();
+                logger.info("Object is linked {}", getObjectData());
+                ctx.writeAndFlush(getConfirmIdentifyMessage());
             } else {
-                logger.info("Object is not linked. objectName: {}", objectName);
-                out.write(getIdentificationFailureMessage());
-                out.flush();
-
+                logger.info("Object is not linked {}", getObjectData());
+                ctx.writeAndFlush(getIdentificationFailureMessage());
                 statistic.block(BlockType.LINKED);
 
-                socket.close();
+                ctx.close();
                 throw new MySocketException("identify failure");
             }
         } catch (NamingException e) {
-            logger.warn("Identify remote server error. objectName: {}", objectName, e);
-            out.write(getIdentificationFailureMessage());
-            out.flush();
+            logger.warn("Identify remote server error {}", getObjectData(), e);
+            ctx.writeAndFlush(getIdentificationFailureMessage());
 
             statistic.block(BlockType.SERVER_ERROR);
 
-            socket.close();
+            ctx.close();
             throw new MySocketException("identify failure");
         }
+    }
+
+    /**
+     * Метод формирует массив byte для отказа идентификации
+     * @return массив byte
+     */
+    private byte[] getIdentificationFailureMessage() {
+        byte[] response = new byte[6];
+
+        response[0] = 0;
+        response[1] = 4 & 0xff;
+        response[2] = 3 & 0xff;
+        response[3] = 40 & 0xff; // 0010 1000 это версия 2
+//        response[3] = 24 & 0xff; // 0001 1000 это версия 1
+        response[4] = 1 & 0xff;
+        response[5] = 1 & 0xff; // TODO Номер сервера в системе (для теста написал 1)
+
+        logger.info("Send identify failure message {} {}", Arrays.toString(response), getObjectData());
+        return response;
     }
 
     /**
@@ -355,26 +338,7 @@ public class EchoThread extends Thread {
         response[5] = 1 & 0xff; // TODO Номер сервера в системе (для теста написал 1)
         System.arraycopy(serverNameBytes, 0, response, 6, serverNameBytes.length);
 
-        logger.info("Send confirm identify message {}. objectName: {}", Arrays.toString(response), objectName);
-        return response;
-    }
-
-    /**
-     * Метод формирует массив byte для отказа идентификации
-     * @return массив byte
-     */
-    private byte[] getIdentificationFailureMessage() {
-        byte[] response = new byte[6];
-
-        response[0] = 0;
-        response[1] = 4 & 0xff;
-        response[2] = 3 & 0xff;
-        response[3] = 40 & 0xff; // 0010 1000 это версия 2
-//        response[3] = 24 & 0xff; // 0001 1000 это версия 1
-        response[4] = 1 & 0xff;
-        response[5] = 1 & 0xff; // TODO Номер сервера в системе (для теста написал 1)
-
-        logger.info("Send identify failure message {}. objectName: {}", Arrays.toString(response), objectName);
+        logger.info("Send confirm identify message {} {}", Arrays.toString(response), getObjectData());
         return response;
     }
 
@@ -575,7 +539,7 @@ public class EchoThread extends Thread {
         }
 
         // Проверяем существует ли директория для логов, создаем если такой нет
-        Path path = DriverProperty.getInstance().getPushEventLogPath().resolve(socket.getInetAddress().getHostAddress());
+        Path path = DriverProperty.getInstance().getPushEventLogPath().resolve(statistic.getIp());
         if (!Files.exists(path)) {
             Files.createDirectory(path);
         }

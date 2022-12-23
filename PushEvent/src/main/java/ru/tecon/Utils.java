@@ -26,6 +26,15 @@ public class Utils {
         return new InitialContext(ht);
     }
 
+//    Используется для песочницы на payara
+//    private static Context getContext() throws NamingException {
+//        Hashtable<String, String> ht = new Hashtable<>();
+//        ht.put(Context.INITIAL_CONTEXT_FACTORY, RemoteEJBContextFactory.FACTORY_CLASS);
+//        ht.put(Context.PROVIDER_URL, "http://" + DriverProperty.getInstance().getServerURI() + ":" + DriverProperty.getInstance().getServerPort() + "/ejb-invoker");
+//
+//        return new InitialContext(ht);
+//    }
+
     /**
      * Метод возвращает ejb bean класс для работы с базой
      * @return ejb класс
@@ -33,6 +42,8 @@ public class Utils {
      */
     public static LoadOPCRemote loadRMI() throws NamingException {
         return  (LoadOPCRemote) getContext().lookup("ejb/LoadOPC#" + LoadOPCRemote.class.getName());
+        // Для payara
+//        return  (LoadOPCRemote) getContext().lookup("java:global/DriverCore/LoadOPC!" + LoadOPCRemote.class.getName());
     }
 
     /**

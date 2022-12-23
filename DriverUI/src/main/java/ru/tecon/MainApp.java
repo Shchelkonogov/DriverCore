@@ -7,7 +7,7 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 import ru.tecon.controller.LogStage;
 import ru.tecon.controller.RootLayoutController;
-import ru.tecon.server.EchoSocketServer;
+import ru.tecon.mfk1500Server.MFK1500Server;
 
 import java.io.IOException;
 import java.util.logging.LogManager;
@@ -44,7 +44,7 @@ public class MainApp extends Application {
 
     @Override
     public void stop() throws Exception {
-        EchoSocketServer.stopSocket();
+        MFK1500Server.stopServer();
         super.stop();
     }
 }

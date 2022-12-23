@@ -10,7 +10,8 @@ public enum BlockType {
     LINKED("не слинковано"),
     SERVER_ERROR("ошибка сервера"),
     USER("заблокировано пользователем"),
-    LINK_ERROR("разрыв соединения");
+    LINK_ERROR("разрыв соединения"),
+    DEVICE_CHANGE("изменился прибор");
 
     private String name;
 

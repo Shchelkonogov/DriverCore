@@ -17,6 +17,7 @@ public class LazyCustomDataModel<T extends WebStatistic> extends LazyDataModel<T
 
     private List<T> dataSource = new ArrayList<>();
     private List<T> filteredData = new ArrayList<>();
+    private List<T> filteredAndPaginateData = new ArrayList<>();
 
     public LazyCustomDataModel() {
     }
@@ -87,15 +88,15 @@ public class LazyCustomDataModel<T extends WebStatistic> extends LazyDataModel<T
         //paginate
         if (dataSize > pageSize) {
             try {
-                return data.subList(first, first + pageSize);
+                filteredAndPaginateData = data.subList(first, first + pageSize);
+            } catch (IndexOutOfBoundsException e) {
+                filteredAndPaginateData = data.subList(first, first + (dataSize % pageSize));
             }
-            catch (IndexOutOfBoundsException e) {
-                return data.subList(first, first + (dataSize % pageSize));
-            }
+        } else {
+            filteredAndPaginateData = data;
         }
-        else {
-            return data;
-        }
+
+        return filteredAndPaginateData;
     }
 
     /**
@@ -103,6 +104,13 @@ public class LazyCustomDataModel<T extends WebStatistic> extends LazyDataModel<T
      */
     public List<T> getFilteredData() {
         return filteredData;
+    }
+
+    /**
+     * @return фильтрованные и разбитые на страницы данные
+     */
+    public List<T> getFilteredAndPaginateData() {
+        return filteredAndPaginateData;
     }
 
     /**

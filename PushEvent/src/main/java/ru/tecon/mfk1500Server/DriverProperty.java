@@ -26,6 +26,7 @@ public class DriverProperty {
     private int sshPort;
     private int trafficLimit;
     private int resourceNumber;
+    private int nWorkThreads;
 
     private Path instantConfigPath;
     private Path historyConfigPath;
@@ -82,6 +83,7 @@ public class DriverProperty {
             sshPort = Integer.parseInt(prop.getProperty("sshPort", "22"));
             trafficLimit = Integer.parseInt(prop.getProperty("trafficLimit"));
             resourceNumber = Integer.parseInt(prop.getProperty("resourceNumber"));
+            nWorkThreads = Integer.parseInt(prop.getProperty("nWorkThreads", "0"));
         } catch (NumberFormatException ex) {
             throw new MyServerStartException("error parse port numbers", ex);
         }
@@ -187,6 +189,10 @@ public class DriverProperty {
         return messageServicePort;
     }
 
+    public int getnWorkThreads() {
+        return nWorkThreads;
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", DriverProperty.class.getSimpleName() + "[", "]")
@@ -195,6 +201,7 @@ public class DriverProperty {
                 .add("sshPort=" + sshPort)
                 .add("trafficLimit=" + trafficLimit)
                 .add("resourceNumber=" + resourceNumber)
+                .add("nWorkThreads=" + nWorkThreads)
                 .add("instantConfigPath=" + instantConfigPath)
                 .add("historyConfigPath=" + historyConfigPath)
                 .add("pushEventLogPath=" + pushEventLogPath)

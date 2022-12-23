@@ -1,22 +1,27 @@
 package ru.tecon.traffic;
 
+import io.netty.channel.Channel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.tecon.Utils;
+import ru.tecon.beanInterface.LoadOPCRemote;
 import ru.tecon.controllerData.ControllerConfig;
-import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.driverCoreClient.model.LastData;
+import ru.tecon.exception.MyStatisticException;
+import ru.tecon.mfk1500Server.DriverProperty;
+import ru.tecon.mfk1500Server.ObjectModelMutex;
+import ru.tecon.model.DataModel;
 import ru.tecon.model.WebStatistic;
 
 import javax.naming.NamingException;
-import java.io.IOException;
 import java.io.Serializable;
-import java.net.Socket;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static java.time.temporal.ChronoUnit.HOURS;
@@ -31,18 +36,22 @@ public class Statistic implements Serializable {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
 
+    private static final String serverName = DriverProperty.getInstance().getServerName();
+
+    private final ObjectModelMutex objectModelMutex = new ObjectModelMutex();
+
     private static Logger logger = LoggerFactory.getLogger(Statistic.class);
 
     private String ip;
     private String objectName;
 
-    private AtomicInteger socketCount = new AtomicInteger(0);
-    private AtomicInteger inputTraffic = new AtomicInteger(0);
-    private AtomicInteger outputTraffic = new AtomicInteger(0);
-    private AtomicInteger monthTraffic = new AtomicInteger(0);
-    private AtomicInteger inputTrafficReal = new AtomicInteger(0);
-    private AtomicInteger outputTrafficReal = new AtomicInteger(0);
-    private AtomicInteger monthTrafficReal = new AtomicInteger(0);
+    private AtomicInteger chanelCount = new AtomicInteger(0);
+    private AtomicLong inputTraffic = new AtomicLong(0);
+    private AtomicLong outputTraffic = new AtomicLong(0);
+    private AtomicLong monthTraffic = new AtomicLong(0);
+    private AtomicLong inputTrafficReal = new AtomicLong(0);
+    private AtomicLong outputTrafficReal = new AtomicLong(0);
+    private AtomicLong monthTrafficReal = new AtomicLong(0);
 
     private LocalDateTime lastRequestTime = LocalDateTime.now();
 
@@ -55,7 +64,13 @@ public class Statistic implements Serializable {
 
     private Map<String, LastDayData> lastDayData = new HashMap<>();
 
-    private transient Socket socket;
+    private transient String controllerIdent;
+    private List<DataModel> objectModel;
+
+    private byte[] markV2;
+    private transient byte[] markV2Temp;
+
+    private transient Channel channel;
 
     private transient Event event;
 
@@ -95,26 +110,26 @@ public class Statistic implements Serializable {
      * Проверка открыт ли socket
      * @return true - открыт, false - закрыт
      */
-    public boolean isSocketOpen() {
-        return Objects.nonNull(socket) && !socket.isClosed();
+    public boolean isChanelOpen() {
+        return Objects.nonNull(channel) && channel.isOpen();
     }
 
     /**
      * Устанавливаем socket
-     * @param socket socket
+     * @param channel socket
      */
-    public void setSocket(Socket socket) {
+    public void setChannel(Channel channel) {
         close();
-        socketCount.addAndGet(1);
-        this.socket = socket;
+        chanelCount.addAndGet(1);
+        this.channel = channel;
         update();
     }
 
     /**
      * @return количество сокетов, которые открывал контроллер
      */
-    public int getSocketCount() {
-        return socketCount.get();
+    public int getChanelCount() {
+        return chanelCount.get();
     }
 
     /**
@@ -122,10 +137,10 @@ public class Statistic implements Serializable {
      * Если socket в данный момент открыт, то новое количество будет 1 иначе 0
      */
     public void clearSocketCount() {
-        if (!isSocketOpen()) {
-            socketCount.set(0);
+        if (!isChanelOpen()) {
+            chanelCount.set(0);
         } else {
-            socketCount.set(1);
+            chanelCount.set(1);
         }
         update();
     }
@@ -134,11 +149,15 @@ public class Statistic implements Serializable {
      * Закрытие открытого socket, если такой открыт в данный момент
      */
     public void close() {
-        if (isSocketOpen()) {
+        if (isChanelOpen()) {
             try {
-                socket.close();
-            } catch (IOException e) {
-                logger.warn("Close socket error", e);
+                boolean awaitStatus = channel.close().await(5, TimeUnit.SECONDS);
+                if (!awaitStatus) {
+                    logger.warn("can't close channel for {}", getIp());
+                    channel = null;
+                }
+            } catch (InterruptedException e) {
+                logger.warn("Close chanel error", e);
             }
         }
     }
@@ -148,14 +167,14 @@ public class Statistic implements Serializable {
      * @return true если завис
      */
     public boolean isSocketHung() {
-        return isSocketOpen() && (Math.abs(HOURS.between(lastRequestTime, LocalDateTime.now())) > 2);
+        return isChanelOpen() && (Math.abs(HOURS.between(lastRequestTime, LocalDateTime.now())) >= 2);
     }
 
     /**
      * Метод увеличивает количество входящего трафика
      * @param count количество байт на сколько надо увеличить трафик
      */
-    public void updateInputTraffic(int count) {
+    public void updateInputTraffic(long count) {
         inputTrafficReal.addAndGet(count);
         monthTrafficReal.addAndGet(count);
 
@@ -172,7 +191,7 @@ public class Statistic implements Serializable {
      * Метод увеличивает количество исходящего трафика
      * @param count количество байт на сколько надо увеличить трафик
      */
-    public void updateOutputTraffic(int count) {
+    public void updateOutputTraffic(long count) {
         outputTrafficReal.addAndGet(count);
         monthTrafficReal.addAndGet(count);
 
@@ -260,8 +279,8 @@ public class Statistic implements Serializable {
      * @param count значение трафика
      * @return округленное значение
      */
-    private int roundTraffic(int count) {
-        return ((int) Math.ceil(count / 1024d)) * 1024;
+    private long roundTraffic(long count) {
+        return ((long) Math.ceil(count / 1024d)) * 1024;
     }
 
     public String getLastRequestTime() {
@@ -278,6 +297,10 @@ public class Statistic implements Serializable {
 
     public void block(BlockType blockType) {
         block = true;
+        if ((blockType == BlockType.LINKED) &&
+                !(Objects.isNull(objectName) || (objectName.equals("")))) {
+            blockType = BlockType.DEVICE_CHANGE;
+        }
         blockTypes.add(blockType);
         close();
         update();
@@ -351,9 +374,9 @@ public class Statistic implements Serializable {
 
     public WebStatistic getWebStatistic() {
         WebStatistic statistic = new WebStatistic(DriverProperty.getInstance().getServerName(), getIp(), getObjectName(),
-                String.valueOf(getSocketCount()), getBlockToString(), getLastRequestTime(),
+                String.valueOf(getChanelCount()), getBlockToString(), getLastRequestTime(),
                 getInputTraffic(), getOutputTraffic(), getTraffic(), getMonthTraffic());
-        statistic.setClosed(!isSocketOpen());
+        statistic.setClosed(!isChanelOpen());
         return statistic;
     }
 
@@ -438,12 +461,78 @@ public class Statistic implements Serializable {
         }
     }
 
+    public byte[] getMarkV2() {
+        if (markV2 == null) {
+            markV2 = new byte[0];
+        }
+        return copyMark(markV2);
+    }
+
+    public void setMarkV2(byte[] markV2) {
+        this.markV2Temp = copyMark(markV2);
+    }
+
+    public void updateMarkV2() {
+        if (markV2Temp != null) {
+            markV2 = copyMark(markV2Temp);
+            markV2Temp = null;
+        }
+    }
+
+    private byte[] copyMark(byte[] data) {
+        byte[] result = new byte[data.length];
+        System.arraycopy(data, 0, result, 0, data.length);
+        return result;
+    }
+
+    public void clearMarkV2() {
+        markV2 = null;
+    }
+
+    public void clearObjectModel() {
+        synchronized (objectModelMutex) {
+            objectModel = null;
+        }
+    }
+
+    public List<DataModel> getObjectModel() throws MyStatisticException {
+        synchronized (objectModelMutex) {
+            LoadOPCRemote remote;
+            try {
+                remote = Utils.loadRMI();
+            } catch (NamingException e) {
+                throw new MyStatisticException("error load RMI", e);
+            }
+
+            if (objectModel == null) {
+                objectModel = remote.loadObjectModel(serverName + "_" + controllerIdent, serverName);
+                logger.info("Load object model from database {} model size {}", controllerIdent, objectModel.size());
+            }
+
+            List<DataModel> tempObjectModel = new ArrayList<>();
+            for (DataModel model: objectModel) {
+                tempObjectModel.add(new DataModel(model));
+            }
+
+            tempObjectModel = remote.loadObjectModelStartTimes(tempObjectModel);
+            Collections.sort(tempObjectModel);
+
+            logger.info("Object model for {} is: {}", controllerIdent, objectModel);
+            logger.info("Object model with start time for {} is: {}", controllerIdent, tempObjectModel);
+            return tempObjectModel;
+        }
+    }
+
+    public void setControllerIdent(String controllerIdent) {
+        this.controllerIdent = controllerIdent;
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", Statistic.class.getSimpleName() + "[", "]")
                 .add("ip='" + ip + "'")
                 .add("objectName='" + objectName + "'")
-                .add("socketCount=" + socketCount)
+                .add("chanelCount=" + chanelCount)
                 .add("inputTraffic=" + inputTraffic)
                 .add("outputTraffic=" + outputTraffic)
                 .add("monthTraffic=" + monthTraffic)
@@ -455,7 +544,7 @@ public class Statistic implements Serializable {
                 .add("block=" + block)
                 .add("blockTypes=" + blockTypes)
                 .add("ignoreTraffic=" + ignoreTraffic)
-                .add("socket=" + socket)
+                .add("chanel=" + channel)
                 .add("lastDayData=" + lastDayData)
                 .toString();
     }

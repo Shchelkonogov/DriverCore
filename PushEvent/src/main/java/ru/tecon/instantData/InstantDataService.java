@@ -3,11 +3,11 @@ package ru.tecon.instantData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import ru.tecon.Utils;
-import ru.tecon.mfk1500Server.DriverProperty;
 import ru.tecon.isacom.*;
+import ru.tecon.mfk1500Server.DriverProperty;
+import ru.tecon.mfk1500Server.MFK1500Server;
 import ru.tecon.model.DataModel;
 import ru.tecon.model.ValueModel;
-import ru.tecon.server.EchoSocketServer;
 import ru.tecon.traffic.BlockType;
 import ru.tecon.traffic.ControllerSocket;
 
@@ -86,7 +86,7 @@ public final class InstantDataService {
              InputStream in = socket.getInputStream();
              OutputStream out = socket.getOutputStream()) {
 
-            if (EchoSocketServer.isBlocked(url, BlockType.TRAFFIC)) {
+            if (MFK1500Server.isBlocked(url, BlockType.TRAFFIC)) {
                 logger.warn("Traffic block {}", errorPath);
                 Utils.getDataUploaderAppEJB().updateCommand(0, rowID, "Error",
                         "Превышение трафика по объекту '" + errorPath + "'");
@@ -222,7 +222,7 @@ public final class InstantDataService {
                                 " слинкованных параетров по объекту " + objectName);
             }
         } catch (ConnectException e) {
-            logger.warn("Socket connect exception", e);
+            logger.warn("Socket connect exception {}", url, e);
             try {
                 Utils.getDataUploaderAppEJB().updateCommand(0, rowID, "Error",
                         "Невозможно подключиться к прибору");

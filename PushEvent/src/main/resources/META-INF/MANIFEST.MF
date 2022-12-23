@@ -1,3 +1,3 @@
 Manifest-Version: 1.0
-Main-Class: ru.tecon.server.EchoSocketServer
+Main-Class: ru.tecon.mfk1500Server.MFK1500Server
 

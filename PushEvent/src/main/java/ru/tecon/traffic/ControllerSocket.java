@@ -1,7 +1,7 @@
 package ru.tecon.traffic;
 
 import ru.tecon.mfk1500Server.DriverProperty;
-import ru.tecon.server.EchoSocketServer;
+import ru.tecon.mfk1500Server.MFK1500Server;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -24,7 +24,7 @@ public final class ControllerSocket implements Closeable {
     public ControllerSocket(String url) throws IOException {
         socket = new Socket(InetAddress.getByName(url), DriverProperty.getInstance().getInstantPort());
 
-        Statistic st = EchoSocketServer.getStatistic(url);
+        Statistic st = MFK1500Server.getStatistic(url);
 
         in = new MonitorInputStream(socket.getInputStream());
         in.setStatistic(st);

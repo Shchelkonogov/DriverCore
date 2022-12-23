@@ -18,10 +18,9 @@
             <LevelRangeFilter minLevel="ERROR" maxLevel="WARN" onMatch="ACCEPT" onMismatch="DENY"/>
             <PatternLayout pattern="${LOG_PATTERN}"/>
             <Policies>
-<!--                <OnStartupTriggeringPolicy minSize="0"/>-->
                 <OnStartupTriggeringPolicy/>
                 <TimeBasedTriggeringPolicy/>
-                <SizeBasedTriggeringPolicy size="10MB"/>
+                <SizeBasedTriggeringPolicy size="20MB"/>
             </Policies>
             <DefaultRolloverStrategy max="10"/>
         </RollingFile>
@@ -30,10 +29,9 @@
                      filePattern="${APP_LOG_ROOT}/$${date:yyyy-MM}/app-trace-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout pattern="${LOG_PATTERN}"/>
             <Policies>
-<!--                <OnStartupTriggeringPolicy minSize="0"/>-->
                 <OnStartupTriggeringPolicy/>
                 <TimeBasedTriggeringPolicy/>
-                <SizeBasedTriggeringPolicy size="10MB"/>
+                <SizeBasedTriggeringPolicy size="20MB"/>
             </Policies>
             <DefaultRolloverStrategy max="10"/>
         </RollingFile>

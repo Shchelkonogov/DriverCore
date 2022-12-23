@@ -29,11 +29,16 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+
+// TODO Добавить кнопку запросить конфигурацию
+//  При первоначальной загрузки страници сделать крутилку (подключено 3 сервера жду данные от серверов, сервер 1 загружен и тд.)
+//  И потом уже отображать данные, так же не обновлять данные по серверам, которые первоначально не были загружены.
+//  В колонке сервера поставить фильтр по выпадающему меню с существующими серверами
+//  Когда убирается сервер из прикрепленных, то из морды удалять его данные
+//  Добавить кнопку скинуть метку, добавить кнопку скинуть модель объекта
 
 /**
  * Контроллер для jsf статистики работы серверов MFK1500
@@ -157,22 +162,6 @@ public class StatisticMB implements Serializable {
         command.addParameter("sessionID", sessionID);
 
         webConsoleBean.produceMessage(command);
-
-        // Для тестирования. Отправка запроса на полную статистику удаленному серверу.
-//        Hashtable<String, String> ht = new Hashtable<>();
-//        ht.put(Context.INITIAL_CONTEXT_FACTORY, "weblogic.jndi.WLInitialContextFactory");
-//        ht.put(Context.PROVIDER_URL, "t3://172.16.4.26:7001");
-//
-//        try {
-//            Context ctx = new InitialContext(ht);
-//
-//            LoadOPCRemote remote = (LoadOPCRemote) ctx.lookup("ejb.LoadOPC#ru.tecon.beanInterface.LoadOPCRemote");
-//
-//            remote.requestStatistic();
-//        } catch (NamingException e) {
-//            e.printStackTrace();
-//        }
-
     }
 
     /**
@@ -298,10 +287,27 @@ public class StatisticMB implements Serializable {
         PrimeFaces.current().executeScript("PF('tableWidget').filter(); updateFooter();");
     }
 
+    public void clearMark() {
+        Command command = new Command("clearMark");
+        command.addParameter("server", selectedRow.getServerName());
+        command.addParameter("url", selectedRow.getIp());
+
+        webConsoleBean.produceMessage(command);
+    }
+
+    public void clearObjectModel() {
+        Command command = new Command("clearModel");
+        command.addParameter("server", selectedRow.getServerName());
+        command.addParameter("url", selectedRow.getIp());
+
+        webConsoleBean.produceMessage(command);
+    }
+
     /**
      * Обработка запроса на выгрузку последних переданных груп данных от контроллера
      */
     public void requestLog() {
+        // TODO Реализовать крутилочку, что бы было понятно ожидание
         Command command = new Command("getLastConfigNames");
         command.addParameter("server", selectedRow.getServerName());
         command.addParameter("url", selectedRow.getIp());
@@ -315,6 +321,7 @@ public class StatisticMB implements Serializable {
      * @param event информация о выбранной строке
      */
     public void onRowSelect(SelectEvent<LastData> event) {
+        // TODO Реализовать крутилочку, что бы было понятно ожидание
         String[] split = event.getObject().getIdentifier().split(":");
 
         Command command = new Command("getConfigGroup");
@@ -352,7 +359,7 @@ public class StatisticMB implements Serializable {
                     tableDatum.getIp().equals(st.getIp())) {
                 List<String> update = new ArrayList<>();
                 boolean filter = false;
-                int index = tableData.getFilteredData().indexOf(tableDatum);
+                int index = tableData.getFilteredAndPaginateData().indexOf(tableDatum);
 
                 String sortField = table.getSortField() == null ? "objectName" : table.getSortField();
                 Map<String, String> filterData = table.getFilterBy()
@@ -363,7 +370,7 @@ public class StatisticMB implements Serializable {
 
                 if (!tableDatum.getObjectName().equals(st.getObjectName())) {
                     tableDatum.setObjectName(st.getObjectName());
-                    if (sortField.equals("objectName") ||
+                    if ((sortField.equals("objectName") && (index != -1)) ||
                             (filterData.keySet().contains("objectName") && st.getObjectName().contains(filterData.get("objectName")))) {
                         filter = true;
                     } else {

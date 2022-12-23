@@ -125,17 +125,28 @@
             </f:facet>
         </p:dataTable>
 
-        <p:contextMenu rendered="#{statisticBean.admin}" widgetVar="wvCtx" id="ctx" for="table">
-            <p:menuitem value="Блокировать" action="#{statisticBean.changeStatus(true)}"/>
-            <p:menuitem value="Разблокировать" action="#{statisticBean.changeStatus(false)}"/>
-            <p:menuitem value="Снять ограничение трафика" action="#{statisticBean.setIgnoreTraffic(true)}" />
-            <p:menuitem value="Вернуть ограничение трафика" action="#{statisticBean.setIgnoreTraffic(false)}" />
-            <p:menuitem value="Последние данные" onclick="PF('logDialog').show();"
-                        action="#{statisticBean.requestLog}"/>
+        <p:contextMenu rendered="#{statisticBean.admin}" widgetVar="wvCtx" id="ctx" for="table" style="width: 250px;" >
+            <p:menuitem value="Блокировать" action="#{statisticBean.changeStatus(true)}" icon="pi pi-lock"
+                        disabled="#{!statisticBean.selectedRow.status.equals('свободно')}" />
+            <p:menuitem value="Разблокировать" action="#{statisticBean.changeStatus(false)}"
+                        disabled="#{statisticBean.selectedRow.status.equals('свободно')}" icon="pi pi-lock-open" />
             <p:separator/>
-            <p:menuitem value="Переподписать объект" action="#{statisticBean.resignObject}"
+            <p:menuitem value="Снять ограничение трафика" action="#{statisticBean.setIgnoreTraffic(true)}" icon="pi pi-unknown"
+                        disabled="#{statisticBean.selectedRow.trafficMonth.contains('no limit')}" />
+            <p:menuitem value="Вернуть ограничение трафика" action="#{statisticBean.setIgnoreTraffic(false)}" icon="pi pi-unknown"
+                        disabled="#{!statisticBean.selectedRow.trafficMonth.contains('no limit')}" />
+            <p:separator/>
+            <p:menuitem value="Последние данные" onclick="PF('logDialog').show();" icon="pi pi-unknown"
+                        action="#{statisticBean.requestLog}"
                         disabled="#{statisticBean.selectedRow.objectName.equals('')}"/>
-            <p:menuitem value="Удалить" action="#{statisticBean.removeObject}">
+            <p:menuitem value="Переподписать объект" action="#{statisticBean.resignObject}" icon="pi pi-refresh"
+                        disabled="#{!statisticBean.selectedRow.status.equals('изменился прибор')}"/>
+            <p:menuitem value="Сбросить метку записи" action="#{statisticBean.clearMark}" icon="pi pi-unknown"
+                        disabled="#{statisticBean.selectedRow.objectName.equals('')}"/>
+            <p:menuitem value="Сбросить модель объекта" action="#{statisticBean.clearObjectModel}" icon="pi pi-unknown"
+                        disabled="#{statisticBean.selectedRow.objectName.equals('')}"/>
+            <p:separator/>
+            <p:menuitem value="Удалить" action="#{statisticBean.removeObject}" icon="pi pi-trash">
                 <p:confirm header="Подтверждение" message="Вы уверены что хотите удалить эту запись?" icon="pi pi-info-circle" />
             </p:menuitem>
         </p:contextMenu>
